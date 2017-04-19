@@ -1,20 +1,30 @@
 <!DOCTYPE html>
 <html>
+<head>
+	<style>
+	
+	.header   {width: 512px;}
+	.tinput {margin-right: 50px; text-align:right;  float:right;
+}
+</style>
+</head>
 <body>
-
-<canvas id="myCanvas" width="512" height="512"
+<canvas id="myCanvas" width="1024" height="512"
 style="border:1px solid #c3c3c3;">
 Your browser does not support the canvas element.
 </canvas>
 <div>
-	<p>Luminance: <span id="text_luminance"></span>
-		<input style="margin-left:20px" type="range" id="range_luminance" value="40"/>
+	<p class="header">Luminance: <span id="text_luminance"></span>
+		<span class="tinput"><input  type="range" id="range_luminance" value="40"/></span>
 	 </p>
-	 <p>a-correction: <span id="txt_a_correction"></span>
-		<input style="margin-left:20px" type="range" id="a_correction" value="50"/>
+	 <p class="header">a-correction: <span id="txt_a_correction"></span>
+		<span class="tinput"><input  type="range" id="a_correction" value="50"/></span>
 	 </p>
-	 <p>b-correction: <span id="txt_b_correction"></span>
-		<input style="margin-left:20px" type="range" id="b_correction" value="50"/>
+	 <p class="header">b-correction: <span id="txt_b_correction"></span>
+		<span class="tinput"><input  type="range" id="b_correction" value="50"/></span>
+	 </p>
+	 <p class="header">Saturation-correction: <span id="txt_sat_correction"></span>
+		<span class="tinput"><input  type="range" id="sat_correction" value="50"/></span>
 	 </p>
 </div>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>
@@ -96,31 +106,45 @@ function XYZ2RGB(clr)
     return [R, G, B]
 }
 
-function updateCanvas(L, av, bv) {
+function updateCanvas(L, av, bv, mv) {
 	var cf = 2;
 	var canvas = document.getElementById("myCanvas");
 	var ctx = canvas.getContext("2d");
 	for(var a = 0; a < 256; a++) {
 		for(var b = 0; b < 256; b++) {
-			var arr = XYZ2RGB(LUV2XYZ([L, a - 127 + av , b - 127 + bv]))
+			var arr = XYZ2RGB(LUV2XYZ([L, (a - 127) * mv + av , (b - 127) * mv + bv]))
 			ctx.fillStyle = 'rgb('+arr[0]+','+arr[1]+','+arr[2]+')'
 			ctx.fillRect(cf*a,cf*b,cf, cf);
 		}
 	}	
+
+
+	ctx.strokeStyle="white";
+
 	ctx.beginPath();
 	ctx.moveTo(0,256);
 	ctx.lineTo(512,256);
 	ctx.moveTo(256,0);
 	ctx.lineTo(256,512);
 	ctx.stroke();
+
+	drawing = new Image();
+	drawing.src = "Tes512t.png"; // can also be a remote URL e.g. http://
+	drawing.onload = function() {
+   		ctx.drawImage(drawing,512,0);
+	};
 }
 function refresh() {
+	var vl = Math.pow($('#sat_correction').val() / 50.0, 2);
 	updateCanvas($('#range_luminance').val()*1.0 + 30,
 		$('#a_correction').val()*1.0 - 50, 
-		$('#b_correction').val()*1.0 - 50);	
+		$('#b_correction').val()*1.0 - 50,
+		vl);	
 	$('#text_luminance').text($('#range_luminance').val())
 	$('#txt_a_correction').text($('#a_correction').val() - 50)
 	$('#txt_b_correction').text($('#b_correction').val() - 50)
+	$('#txt_sat_correction').text( Math.round(vl * 100) / 100.0)
+
 }
 
 
@@ -129,6 +153,7 @@ $(document).ready(function(){
 	$('#range_luminance').change(refresh)
 	$('#a_correction').change(refresh)
 	$('#b_correction').change(refresh)
+	$('#sat_correction').change(refresh)
 });
 
 
