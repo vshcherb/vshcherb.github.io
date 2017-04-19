@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<canvas id="myCanvas" width="512" height="512"
+style="border:1px solid #c3c3c3;">
+Your browser does not support the canvas element.
+</canvas>
+<div>
+	<p>Luminance: <span id="text_luminance"></span>
+		<input style="margin-left:20px" type="range" id="range_luminance" value="40"/>
+	 </p>
+	 <p>a-correction: <span id="txt_a_correction"></span>
+		<input style="margin-left:20px" type="range" id="a_correction" value="50"/>
+	 </p>
+	 <p>b-correction: <span id="txt_b_correction"></span>
+		<input style="margin-left:20px" type="range" id="b_correction" value="50"/>
+	 </p>
+</div>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>
+<script>
+
+function pow3(x) 
+{
+	return x * x * x;
+}
+
+
+
+function LUV2XYZ(clr) 
+{
+	var L = clr[0], u = clr[1], v = clr[2];
+	var Yn = 1;
+	var Un_prime = 0.2009;
+	var Vn_prime = 0.4610;
+
+	var u_prime	= u / (13 * L) + Un_prime;
+	var v_prime	= v / (13 * L) + Vn_prime;
+	var Y = pow3((L + 16.0) / 116.0);
+    if (L < 8)
+        Y = L / 903.3;
+    // var Y = (luv(1,:) < 8.0) .* (Yn * luv(1,:) / 903.3) + (luv(1,:) >= 8.0) .* (Yn * (((luv(1,:) + 16.0) / 116.0) .^ 3));
+	var X = 9 * u_prime * Y / (4 * v_prime);
+	var Z = (12 - 3 * u_prime - 20 * v_prime) * Y / (4 * v_prime);
+	X *= (0.950456 * 255);
+    Y *=             255;
+    Z *= (1.088754 * 255);
+	return [X, Y, Z]
+
+}
+function LAB2XYZ(clr)
+{
+	var L = clr[0], a = clr[1], b = clr[2];
+	var X, Y, Z, fX, fY, fZ;
+    var RR, GG, BB;
+
+    fY = pow3((L + 16.0) / 116.0);
+    if (fY < 0.008856)
+        fY = L / 903.3;
+    Y = fY;
+
+    if (fY > 0.008856)
+        fY = Math.pow(fY, 1.0/3.0);
+    else
+        fY = 7.787 * fY + 16.0/116.0;
+
+    fX = a / 500.0 + fY;      
+    if (fX > 0.206893)
+        X = pow3(fX);
+    else
+        X = (fX - 16.0/116.0) / 7.787;
+
+    fZ = fY - b /200.0;      
+    if (fZ > 0.206893)
+        Z = pow3(fZ);
+    else
+        Z = (fZ - 16.0/116.0) / 7.787;
+
+    X *= (0.950456 * 255);
+    Y *=             255;
+    Z *= (1.088754 * 255);
+    return [X, Y, Z]
+}
+
+function XYZ2RGB(clr)
+{
+	var X = clr[0], Y = clr[1], Z = clr[2];
+	var RR =  (3.240479*X - 1.537150*Y - 0.498535*Z + 0.5);
+    var GG = (-0.969256*X + 1.875992*Y + 0.041556*Z + 0.5);
+    var BB = (0.055648*X - 0.204043*Y + 1.057311*Z + 0.5);
+
+    R = Math.round(RR < 0 ? 0 : RR > 255 ? 255 : RR);
+    G = Math.round(GG < 0 ? 0 : GG > 255 ? 255 : GG);
+    B = Math.round(BB < 0 ? 0 : BB > 255 ? 255 : BB);
+
+    return [R, G, B]
+}
+
+function updateCanvas(L, av, bv) {
+	var cf = 2;
+	var canvas = document.getElementById("myCanvas");
+	var ctx = canvas.getContext("2d");
+	for(var a = 0; a < 256; a++) {
+		for(var b = 0; b < 256; b++) {
+			var arr = XYZ2RGB(LUV2XYZ([L, a - 127 + av , b - 127 + bv]))
+			ctx.fillStyle = 'rgb('+arr[0]+','+arr[1]+','+arr[2]+')'
+			ctx.fillRect(cf*a,cf*b,cf, cf);
+		}
+	}	
+	ctx.beginPath();
+	ctx.moveTo(0,256);
+	ctx.lineTo(512,256);
+	ctx.moveTo(256,0);
+	ctx.lineTo(256,512);
+	ctx.stroke();
+}
+function refresh() {
+	updateCanvas($('#range_luminance').val()*1.0 + 30,
+		$('#a_correction').val()*1.0 - 50, 
+		$('#b_correction').val()*1.0 - 50);	
+	$('#text_luminance').text($('#range_luminance').val())
+	$('#txt_a_correction').text($('#a_correction').val() - 50)
+	$('#txt_b_correction').text($('#b_correction').val() - 50)
+}
+
+
+$(document).ready(function(){
+	refresh()
+	$('#range_luminance').change(refresh)
+	$('#a_correction').change(refresh)
+	$('#b_correction').change(refresh)
+});
+
+
+</script>
+
+</body>
+</html>
+
