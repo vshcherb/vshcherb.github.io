@@ -13,7 +13,7 @@
 style="border:1px solid #c3c3c3;">
 Your browser does not support the canvas element.
 </canvas>
-<div>
+<div >
 	<p class="header">Luminance: <span id="text_luminance"></span>
 		<span class="tinput"><input  type="range" id="range_luminance" value="40"/></span>
 	 </p>
@@ -26,6 +26,9 @@ Your browser does not support the canvas element.
 	 <p class="header">Saturation-correction: <span id="txt_sat_correction"></span>
 		<span class="tinput"><input  type="range" id="sat_correction" value="50"/></span>
 	 </p>
+</div>
+<div>
+	<button type="button" id="lab_btn">LAB Palette</button>
 </div>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>
 <script>
@@ -158,13 +161,13 @@ function updateCanvas(L, av, bv, mv) {
 			arr = XYZ2RGB(LUV2XYZ([L, (a - 127) * mv + av, (b - 127) * mv + bv], 0, 0))
 
 			//arr = [a, b, 0]
-			if(imageData) {
-				var ind = (512*a*2 + b*2);
-				arr = [imageData[4*ind], imageData[4*ind + 1], imageData[4*ind+2]];
+			//if(imageData) {
+			//	var ind = (512*a*2 + b*2);
+			//	arr = [imageData[4*ind], imageData[4*ind + 1], imageData[4*ind+2]];
 
-				arr = XYZ2LAB(RGB2XYZ(arr))
-				arr = XYZ2RGB(LAB2XYZ([arr[0], arr[1] * mv + av, arr[2] * mv + bv]))
-			}
+			//	arr = XYZ2LAB(RGB2XYZ(arr))
+			//	arr = XYZ2RGB(LAB2XYZ([arr[0], arr[1] * mv + av/10.0, arr[2] * mv + bv/10.0]))
+			//}
 
 			ctx.fillStyle = 'rgb('+arr[0]+','+arr[1]+','+arr[2]+')'
 			ctx.fillRect(cf*a,cf*b,cf, cf);
@@ -181,14 +184,12 @@ function updateCanvas(L, av, bv, mv) {
 	ctx.lineTo(256,512);
 	ctx.stroke();
 
+
 	drawing = new Image();
 	drawing.crossOrigin="anonymous";
 	drawing.src = "Tes512t.png"; // can also be a remote URL e.g. http://
-
-
-
 	drawing.onload = function() {
-   		ctx.drawImage(drawing, 512, 0);
+   		ctx.drawImage(drawing, 512, 0, 512, 512);
    		imageData = ctx.getImageData(512, 0, 512, 512).data;
 	};
 }
@@ -219,3 +220,4 @@ $(document).ready(function(){
 
 </body>
 </html>
+
