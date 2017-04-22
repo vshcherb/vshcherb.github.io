@@ -15,7 +15,7 @@ Your browser does not support the canvas element.
 </canvas>
 <div >
 	<p class="header">Luminance: <span id="text_luminance"></span>
-		<span class="tinput"><input  type="range" id="range_luminance" value="40"/></span>
+		<span class="tinput"><input  type="range" id="range_luminance" value="50"/></span>
 	 </p>
 	 <p class="header">a-correction: <span id="txt_a_correction"></span>
 		<span class="tinput"><input  type="range" id="a_correction" value="50"/></span>
@@ -29,6 +29,14 @@ Your browser does not support the canvas element.
 </div>
 <div>
 	<button type="button" id="lab_btn">LAB Palette</button>
+	<button type="button" class="test_btn" img-data="Test.jpg">1</button>
+	<button type="button" class="test_btn" img-data="Test0.png">2</button>
+	<button type="button" class="test_btn" img-data="Test1.png">3</button>
+	<button type="button" class="test_btn" img-data="Test2.png">4</button>
+	<button type="button" class="test_btn" img-data="Test3.png">5</button>
+	<button type="button" class="test_btn" img-data="Test4.png">6</button>
+	<button type="button" class="test_btn" img-data="Test5.png">7</button>
+	<button type="button" class="test_btn" img-data="Test6.png">8</button>
 </div>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>
 <script>
@@ -149,28 +157,35 @@ function XYZ2RGB(clr)
 
 
 var imageData = null;
+var abCorrection = 4.0;
+var LCorrection = 30.0;
+
 
 function updateCanvas(L, av, bv, mv) {
-	var cf = 2;
 	var canvas = document.getElementById("myCanvas");
 	var ctx = canvas.getContext("2d");
+
 	 
-	for(var a = 0; a < 256; a++) {
-		for(var b = 0; b < 256; b++) {
+	for(var a = 0; a < 512; a++) {
+		for(var b = 0; b < 512; b++) {
 			var arr = [];
-			arr = XYZ2RGB(LUV2XYZ([L, (a - 127) * mv + av, (b - 127) * mv + bv], 0, 0))
+			arr = XYZ2RGB(LAB2XYZ([L + LCorrection, 
+						(a / 2 - 127) * mv + av / abCorrection, 
+						(b / 2 - 127) * mv + bv / abCorrection], 0, 0))
 
 			//arr = [a, b, 0]
-			//if(imageData) {
-			//	var ind = (512*a*2 + b*2);
-			//	arr = [imageData[4*ind], imageData[4*ind + 1], imageData[4*ind+2]];
+			if(imageData) {
+				var ind = (512*b + a);
+				arr = [imageData[4*ind], imageData[4*ind + 1], imageData[4*ind+2]];
 
-			//	arr = XYZ2LAB(RGB2XYZ(arr))
-			//	arr = XYZ2RGB(LAB2XYZ([arr[0], arr[1] * mv + av/10.0, arr[2] * mv + bv/10.0]))
-			//}
+				arr = XYZ2LAB(RGB2XYZ(arr))
+				arr = XYZ2RGB(LAB2XYZ([arr[0] * L / 50,
+					 arr[1] * mv + av/abCorrection, 
+					 arr[2] * mv + bv/abCorrection]))
+			}
 
 			ctx.fillStyle = 'rgb('+arr[0]+','+arr[1]+','+arr[2]+')'
-			ctx.fillRect(cf*a,cf*b,cf, cf);
+			ctx.fillRect(a,b, 1, 1);
 		}
 	}	
 
@@ -183,25 +198,16 @@ function updateCanvas(L, av, bv, mv) {
 	ctx.moveTo(256,0);
 	ctx.lineTo(256,512);
 	ctx.stroke();
-
-
-	drawing = new Image();
-	drawing.crossOrigin="anonymous";
-	drawing.src = "Tes512t.png"; // can also be a remote URL e.g. http://
-	drawing.onload = function() {
-   		ctx.drawImage(drawing, 512, 0, 512, 512);
-   		imageData = ctx.getImageData(512, 0, 512, 512).data;
-	};
 }
 function refresh() {
 	var vl = Math.pow($('#sat_correction').val() / 50.0, 2);
-	updateCanvas($('#range_luminance').val()*1.0 + 30,
+	updateCanvas($('#range_luminance').val() * 1.0,
 		$('#a_correction').val()*1.0 - 50, 
 		$('#b_correction').val()*1.0 - 50,
 		vl);	
 	$('#text_luminance').text($('#range_luminance').val())
-	$('#txt_a_correction').text($('#a_correction').val() - 50)
-	$('#txt_b_correction').text($('#b_correction').val() - 50)
+	$('#txt_a_correction').text(($('#a_correction').val() - 50) / abCorrection);
+	$('#txt_b_correction').text(($('#b_correction').val() - 50) / abCorrection);
 	$('#txt_sat_correction').text( Math.round(vl * 100) / 100.0)
 
 }
@@ -209,11 +215,32 @@ function refresh() {
 
 $(document).ready(function(){
 	refresh()
+	$('#lab_btn').on('click', function() {
+		imageData = null;
+		refresh();
+	});
+	$('.test_btn').each(function() {
+		let obj = $( this );
+		obj.on('click', function() {
+			var canvas = document.getElementById("myCanvas");
+			var ctx = canvas.getContext("2d");
+    		drawing = new Image();
+			drawing.crossOrigin="anonymous";
+			drawing.src = "images/"+obj.attr("img-data"); // can also be a remote URL e.g. http://
+			drawing.onload = function() {
+   				ctx.drawImage(drawing, 512, 0, 512, 512);
+   				imageData = ctx.getImageData(512, 0, 512, 512).data;
+   				refresh();
+			}
+		});
+	});
+
+	
 	$('#range_luminance').change(refresh)
 	$('#a_correction').change(refresh)
 	$('#b_correction').change(refresh)
 	$('#sat_correction').change(refresh)
-});
+})
 
 
 </script>
