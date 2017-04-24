@@ -165,7 +165,7 @@ function XYZ2RGB(clr)
 
 var imageData = null;
 var fullImageData = null;
-var abCorrection = 3.0;
+var abCorrection = 2;
 var LCorrection = 30.0;
 
 
@@ -178,8 +178,8 @@ function updateCanvas(L, av, bv, mv) {
 		for(var b = 0; b < 512; b++) {
 			var arr = [];
 			arr = XYZ2RGB(LAB2XYZ([L + LCorrection, 
-						(a / 2 - 127) * mv + av / abCorrection, 
-						(b / 2 - 127) * mv + bv / abCorrection], 0, 0))
+						(a / 2 - 127 + av / abCorrection) * mv , 
+						(b / 2 - 127  + bv / abCorrection) * mv], 0, 0))
 
 			//arr = [a, b, 0]
 			if(imageData) {
@@ -188,8 +188,8 @@ function updateCanvas(L, av, bv, mv) {
 
 				arr = XYZ2LAB(RGB2XYZ(arr))
 				arr = XYZ2RGB(LAB2XYZ([arr[0] * L / 50,
-					 arr[1] * mv + av/abCorrection, 
-					 arr[2] * mv + bv/abCorrection]))
+					 (arr[1]  + av/abCorrection) * mv, 
+					 (arr[2]  + bv/abCorrection) * mv ]))
 			}
 
 			ctx.fillStyle = 'rgb('+arr[0]+','+arr[1]+','+arr[2]+')'
