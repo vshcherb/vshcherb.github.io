@@ -3,12 +3,17 @@
 <head>
 	<style>
 	
-	.header   {width: 512px;}
-	.tinput {margin-right: 50px; text-align:right;  float:right;
-}
+	.header  {
+		width: 512px;
+	}
+	.tinput {
+		margin-right: 50px; text-align:right;  float:right;
+	}
+	
 </style>
 </head>
 <body>
+
 <canvas id="myCanvas" width="1024" height="512"
 style="border:1px solid #c3c3c3;">
 Your browser does not support the canvas element.
@@ -159,6 +164,7 @@ function XYZ2RGB(clr)
 
 
 var imageData = null;
+var fullImageData = null;
 var abCorrection = 3.0;
 var LCorrection = 30.0;
 
@@ -200,6 +206,7 @@ function updateCanvas(L, av, bv, mv) {
 	ctx.moveTo(256,0);
 	ctx.lineTo(256,512);
 	ctx.stroke();
+	fullImageData = ctx.getImageData(0, 0, 1024, 512).data;
 }
 function refresh() {
 	var vl = Math.pow($('#sat_correction').val() / 50.0, 3);
@@ -212,8 +219,95 @@ function refresh() {
 	$('#txt_b_correction').text(($('#b_correction').val() - 50) / abCorrection);
 	$('#txt_sat_correction').text( Math.round(vl * 100) / 100.0)
 
+
 }
 
+// The Tool-Tip instance:
+function ToolTip(canvas, region, text, width, timeout) {
+
+  	var me = this,                                // self-reference for event handlers
+      	div = document.createElement("div"),      // the tool-tip div
+      	parent = canvas.parentNode,               // parent node for canvas
+      	visible = false;                          // current status
+	  
+  	// set some initial styles, can be replaced by class-name etc.
+  	div.style.cssText = "position:fixed;padding:7px;background:gold;pointer-events:none;width:" + width + "px";
+  	div.innerHTML = text;
+	  
+  	// show the tool-tip
+  	this.show = function(pos) {
+    	if (!visible) {                             // ignore if already shown (or reset time)
+      		visible = true;                           // lock so it's only shown once
+      		setDivPos(pos);                           // set position
+      		parent.appendChild(div);                  // add to parent of canvas
+      		setTimeout(hide, timeout);                // timeout for hide
+    	}
+  	}
+	  
+  	// hide the tool-tip
+  	function hide() {
+    	visible = false;                            // hide it after timeout
+    	parent.removeChild(div);                    // remove from DOM
+  	}
+	
+  	// check mouse position, add limits as wanted... just for example:
+  	function check(e) {
+    	var pos = getPos(e),
+        	posAbs = {x: e.clientX, y: e.clientY};  // div is fixed, so use clientX/Y
+    	if (!visible &&
+        	pos.x >= region.x && pos.x < region.x + region.w &&
+        	pos.y >= region.y && pos.y < region.y + region.h) {
+      		me.show(posAbs);                          // show tool-tip at this pos
+    	}
+    	else setDivPos(posAbs);                     // otherwise, update position
+  	}
+	  
+  	// get mouse position relative to canvas
+  	function getPos(e) {
+    	var r = canvas.getBoundingClientRect();
+    	return {x: e.clientX - r.left, y: e.clientY - r.top}
+  	}
+	  
+  	// update and adjust div position if needed (anchor to a different corner etc.)
+  	function setDivPos(pos) {
+    	if (visible){
+      		if (pos.x < 0) pos.x = 0;
+      		if (pos.y < 0) pos.y = 0;
+      		// other bound checks here
+      		div.style.left = pos.x + "px";
+      		div.style.top = pos.y + "px";
+      		div.innerHTML =  pos.x + " px " + pos.y + " px";
+      		if(fullImageData != null) {
+      			var ind = (1024*pos.y + pos.x);
+				arr = [fullImageData[4*ind], fullImageData[4*ind + 1], fullImageData[4*ind+2]];
+				var vv = XYZ2LAB(RGB2XYZ(arr));
+				vv[0] = Math.round(vv[0])
+				vv[1] = Math.round(vv[1])
+				vv[2] = Math.round(vv[2])
+				div.innerHTML =  arr + " rgb, " + vv + " lab";
+      		}
+    	}
+	  }
+  
+  // we need to use shared event handlers:
+  canvas.addEventListener("mousemove", check);
+  canvas.addEventListener("click", check);
+  
+}
+
+
+function registerTooltip() {
+	var canvas =  document.getElementById("myCanvas");
+    ctx = canvas.getContext("2d"),
+
+
+    region = {x: 0, y: 0, w: 1024, h: 512};
+
+	// create a tool-tip instance:
+	var t1 = new ToolTip(canvas, region, "This is a tool-tip", 150, 3000);
+
+
+}
 
 $(document).ready(function(){
 	refresh()
@@ -242,6 +336,7 @@ $(document).ready(function(){
 	$('#a_correction').change(refresh)
 	$('#b_correction').change(refresh)
 	$('#sat_correction').change(refresh)
+	registerTooltip();
 })
 
 
