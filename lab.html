@@ -159,7 +159,7 @@ function XYZ2RGB(clr)
 
 
 var imageData = null;
-var abCorrection = 3.0;
+var abCorrection = 2.0;
 var LCorrection = 30.0;
 
 
@@ -172,8 +172,8 @@ function updateCanvas(L, av, bv, mv) {
 		for(var b = 0; b < 512; b++) {
 			var arr = [];
 			arr = XYZ2RGB(LAB2XYZ([L + LCorrection, 
-						(a / 2 - 127) * mv + av / abCorrection, 
-						(b / 2 - 127) * mv + bv / abCorrection], 0, 0))
+						(a / 2 - 127 + av / abCorrection) * mv , 
+						(b / 2 - 127  + bv / abCorrection) * mv], 0, 0))
 
 			//arr = [a, b, 0]
 			if(imageData) {
