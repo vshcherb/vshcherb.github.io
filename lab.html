@@ -166,7 +166,7 @@ function XYZ2RGB(clr)
 var imageData = null;
 var fullImageData = null;
 var abCorrection = 2;
-var LCorrection = 30.0;
+var LCorrection = 0.0;
 var colorOutOfRange = [80, 80, 80]
 
 function eq(arr1, arr2) {
@@ -228,7 +228,7 @@ function refresh() {
 		$('#a_correction').val()*1.0 - 50, 
 		$('#b_correction').val()*1.0 - 50,
 		vl);	
-	$('#text_luminance').text($('#range_luminance').val() * 1.0 + 30)
+	$('#text_luminance').text($('#range_luminance').val() * 1.0 + LCorrection)
 	$('#txt_a_correction').text(($('#a_correction').val() - 50) / abCorrection);
 	$('#txt_b_correction').text(($('#b_correction').val() - 50) / abCorrection);
 	$('#txt_sat_correction').text( Math.round(vl * 100) / 100.0)
