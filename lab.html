@@ -302,6 +302,12 @@ function ToolTip(canvas, region, text, width, timeout) {
 				vv[1] = Math.round(vv[1])
 				vv[2] = Math.round(vv[2])
 				div.innerHTML =  arr + " RGB " + vv + " LAB " ;
+				if(vv[0] < 60) {
+					div.style.color = "rgb(255,255,255)"; 	
+				} else {
+					div.style.color = "rgb(0,0,0)";
+				}
+				div.style.background = "rgb("+arr[0]+"," +arr[1]+","+arr[2]+")";
       		}
     	}
 	  }
