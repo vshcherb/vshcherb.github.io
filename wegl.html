@@ -1,0 +1,339 @@
+<html>
+
+<head>
+<title>Learning WebGL &mdash; lesson 1</title>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+    precision mediump float;
+
+    void main(void) {
+        gl_FragColor = vec4(0.7, 1.0, 1.0, 1.0);
+    }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+
+    void main(void) {
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+    }
+</script>
+
+
+<script type="text/javascript">
+
+    var gl;
+    function initGL(canvas) {
+        try {
+            gl = canvas.getContext("experimental-webgl");
+            gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+    function findLineIntersection(p1x, p1y, p2x, p2y, p3x, p3y, p4x, p4y) {
+    	var d = (p1x - p2x) * (p3y - p4y) - (p1y - p2y) * (p3x - p4x);
+    	var atn1 = Math.atan2(p1x - p2x, p1y - p2y);
+    	var atn2 = Math.atan2(p3x - p4x, p3y - p4y);
+     	var df = Math.abs(atn1 - atn2);
+    	// printf("\n %f %f d=%f df=%f df-PI=%f df-2PI=%f", atn1, atn2, d, df, df - M_PI, df - 2 * M_PI);
+    	var THRESHOLD = Math.PI / 6;
+    	if(d == 0 || df < THRESHOLD  || Math.abs(df - Math.PI) < THRESHOLD || Math.abs(df - 2 * Math.PI) < THRESHOLD  ) {
+        	// in case of lines connecting p2 == p3
+        //	return p2;
+    	}
+    	var r=[];
+    	r[0] = ((p1x* p2y-p1y*p2x)*(p3x - p4x) - (p3x* p4y-p3y*p4x)*(p1x - p2x)) / d;
+    	r[1] = ((p1x* p2y-p1y*p2x)*(p3y - p4y) - (p3x* p4y-p3y*p4x)*(p1y - p2y)) / d;
+    	return r;
+	}
+
+	function scalarMultiplication(xA, yA, xB, yB, xC, yC) {
+    	// Scalar multiplication between (AB, AC)
+    	return (xB - xA) * (xC - xA) + (yB - yA) * (yC - yA);
+	}
+
+
+	function getProjection(pointx, pointy,fromx,fromy,tox, toy ) {
+    	var mDist = (fromx - tox) * (fromx - tox) + (fromy - toy) * (fromy - toy);
+    	var projection = scalarMultiplication(fromx, fromy, tox, toy, pointx, pointy);
+    	if (projection < 0) {
+        	return [fromx, fromy];
+    	} else if (projection >= mDist) {
+        	return to;
+    	}
+    	return [fromx + (tox - fromx) * (projection / mDist),
+                  fromy + (toy - fromy) * (projection / mDist)];
+	}
+
+
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+
+    function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+        shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+        shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+    }
+
+
+    var mvMatrix = mat4.create();
+    var pMatrix = mat4.create();
+
+    function setMatrixUniforms() {
+        gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
+        gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
+    }
+
+    var squareVertexPositionBuffer;
+
+    function initBuffers() {
+        squareVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        var radius = 0.08;
+        var smoothLevel = 1;
+        var linePoints = [0,0,0,0.8,1.5,1.3,3.3,3.4,0.4,1.6,0.8,2.5,1.5,3.0,1.3,4.3,2.8,4.0,3.0,4.0,3.5,4.0,3.8,3.0,2.5,1.4];
+        var b1=[],e1=[],b2=[],e2=[];
+		for(var i = 0; i < linePoints.length; i+=2)  {
+        	if(i > 0) {
+            	var ntan = Math.atan2(linePoints[i] - linePoints[i-2],
+                            linePoints[i+1] - linePoints[i-1]);
+            	var nx1 = radius * Math.sin(Math.PI/2 - ntan) ;
+            	var ny1 = radius * Math.cos(Math.PI/2 - ntan) ;
+            	e1[i] = b1[i] = linePoints[i] - nx1;
+            	e1[i+1] = b1[i+1] = linePoints[i+1] + ny1;
+            	e2[i] = b2[i] = linePoints[i] + nx1;
+            	e2[i+1] = b2[i+1] = linePoints[i+1] - ny1;
+            	e1[i-2] = linePoints[i-2] - nx1;
+            	e1[i-1] = linePoints[i-1] + ny1;
+            	e2[i-2] = linePoints[i-2] + nx1;
+            	e2[i-1] = linePoints[i-1] - ny1;
+        	} else {
+
+            	b2[i] = b1[i] = linePoints[i];
+            	b2[i+1] = b1[i+1] = linePoints[i+1];
+        	}
+    	}
+
+        vertices = [];
+        var direction = true;
+        for(var i = 0; i < linePoints.length; i+=2)  {
+        	if(i == 0){
+        		vertices.push(e2[0]);
+        		vertices.push(e2[1]);
+        		vertices.push(0);
+        		
+        		vertices.push(e1[0]);
+        		vertices.push(e1[1]);
+        		vertices.push(0);
+        		
+        		direction = true;
+			} else if(i == linePoints.length - 2) {
+				if(!direction) {
+        			vertices.push(b1[i]);
+        			vertices.push(b1[i+1]);
+        			vertices.push(0);
+        		}
+        		vertices.push(b2[i]);
+        		vertices.push(b2[i+1]);
+        		vertices.push(0);
+        		if(direction) {
+        			vertices.push(b1[i]);
+        			vertices.push(b1[i+1]);
+        			vertices.push(0);
+        		}
+        	} else if(i > 0 && i < linePoints.length - 2) {
+        		var l1 = findLineIntersection(e1[i-2], e1[i-1], b1[i], b1[i+1], 
+        					e1[i], e1[i+1], b1[i+2], b1[i+3]);
+        		var l2 = findLineIntersection(e2[i-2], e2[i-1], b2[i], b2[i+1], 
+            				e2[i], e2[i+1], b2[i+2], b2[i+3]);
+        		var l1Intersects =  (l1[0] >= Math.min(e1[i-2],b1[i]) && l1[0] <= Math.max(e1[i-2],b1[i])) ||
+        							(l1[0] >= Math.min(e1[i],b1[i+2]) && l1[0] <= Math.max(e1[i],b1[i+2]));
+				var l2Intersects =  (l2[0] >= Math.min(e2[i-2],b2[i]) && l2[0] <= Math.max(e2[i-2],b2[i])) ||
+									(l2[0] >= Math.min(e2[i],b2[i+2]) && l2[0] <= Math.max(e2[i],b2[i+2]));
+
+        		if(!l2Intersects && !l1Intersects) {		
+        			// skip point        			
+				} else {
+					var startDirection = l2Intersects;
+					var lp = startDirection ? l2 : l1;
+					var bp = startDirection ? b1 : b2;
+					var ep = startDirection ? e1 : e2;
+					var phase = direction == startDirection ? 0 : 2;
+					if(phase % 3 == 0) {
+						vertices.push(lp[0]);
+        				vertices.push(lp[1]);
+        				vertices.push(0);
+        				phase++;
+					}
+
+        			vertices.push(bp[i]);
+        			vertices.push(bp[i+1]);
+        			vertices.push(0);
+        			phase++;
+        			if(phase % 3 == 0) {
+        				vertices.push(lp[0]);
+        				vertices.push(lp[1]);
+        				vertices.push(0);
+        				phase++;
+        			}
+
+        			if(smoothLevel > 0) {
+        				var dv = 1 / (1 << smoothLevel);
+        				var nt = dv;
+        				while(nt < 1) {
+        					var rx = bp[i]*nt + ep[i]*(1-nt);
+        					var ry = bp[i+1]*nt + ep[i+1]*(1-nt);
+        					var ld = (rx-linePoints[i])*(rx-linePoints[i]) + 
+        							 (ry-linePoints[i+1])*(ry-linePoints[i+1]);
+        					vertices.push(linePoints[i]+radius/Math.sqrt(ld)*(rx-linePoints[i]));
+        					vertices.push(linePoints[i+1]+radius/Math.sqrt(ld)*(ry-linePoints[i+1]));
+        					vertices.push(0); 
+        					phase++;
+        					if(phase % 3 == 0) {
+								vertices.push(lp[0]);
+        						vertices.push(lp[1]);
+        						vertices.push(0);
+        						phase++;
+        					}
+        					nt += dv;
+        				}
+					}
+					
+        			vertices.push(ep[i]);
+        			vertices.push(ep[i+1]);
+        			vertices.push(0);
+        			phase++;
+        			if(phase % 3 == 0) {
+        				vertices.push(ep[i]);
+        				vertices.push(ep[i+1]);
+        				vertices.push(0);
+						vertices.push(lp[0]);
+        				vertices.push(lp[1]);
+        				vertices.push(0);
+        				phase++;
+        			}
+
+        			if(smoothLevel > 0) {
+						direction = direction;
+					} else {
+						direction = !direction; 
+					}
+					
+				}
+
+				
+        	}
+        }
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        squareVertexPositionBuffer.itemSize = 3;
+        squareVertexPositionBuffer.numItems = vertices.length / 3;
+    }
+
+
+    function drawScene() {
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+        mat4.identity(mvMatrix);
+
+        mat4.translate(mvMatrix, [-2.0, -2.0, -8.0]);
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+        setMatrixUniforms();
+       gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+       // gl.drawArrays(gl.LINE_STRIP, 0, squareVertexPositionBuffer.numItems);
+    }
+
+
+
+    function webGLStart() {
+        var canvas = document.getElementById("lesson01-canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+
+        gl.clearColor(0.1, 0.1, 0.1, 1);
+        gl.enable(gl.DEPTH_TEST);
+
+        drawScene();
+    }
+
+
+</script>
+
+
+</head>
+
+
+<body onload="webGLStart();">
+ 
+    <canvas id="lesson01-canvas" style="border: none;" width="500" height="500"></canvas>
+
+    <br/>
+ </body>
+
+</html>
