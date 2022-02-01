@@ -9,6 +9,9 @@
 	.tinput {
 		margin-right: 50px; text-align:right;  float:right;
 	}
+	.section { 
+		margin-top: 5px;
+	}
 	
 </style>
 </head>
@@ -32,8 +35,10 @@ Your browser does not support the canvas element.
 		<span class="tinput"><input  type="range" id="sat_correction" value="50"/></span>
 	 </p>
 </div>
-<div>
+<p>Lab palette:
 	<button type="button" id="lab_btn">LAB Palette</button>
+</p>
+<p>Generated test:
 	<button type="button" class="test_btn" img-data="Test.jpg">1</button>
 	<button type="button" class="test_btn" img-data="Test0.png">2</button>
 	<button type="button" class="test_btn" img-data="Test1.png">3</button>
@@ -44,10 +49,12 @@ Your browser does not support the canvas element.
 	<button type="button" class="test_btn" img-data="Test6.png">8</button>
 	<button type="button" class="test_btn" img-data="JTest2.jpg">9</button>
 	<button type="button" class="test_btn" img-data="JTest3.jpg">10</button>
+</p>
+<p>Color tricks:
 	<button type="button" class="test_btn" img-data="Test11.png">Color</button>
 	<button type="button" class="test_btn" img-data="Test12.png">Clr-1</button>
 	<button type="button" class="test_btn" img-data="Test13.png">Clr-2</button>
-</div>
+</p>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>
 <script>
 
@@ -187,20 +194,62 @@ function eq(arr1, arr2) {
 	}
 	return true;
 }
+function intersects(circles, circle, circleRadius) {
+	if ((Math.abs(circle.x) + circle.r) * (Math.abs(circle.x) + circle.r) +
+		(Math.abs(circle.y) + circle.r) * (Math.abs(circle.y) + circle.r) >
+		circleRadius * circleRadius) {
+		return true;
+	}
+	let intersect = false;
+	circles.forEach(c => {
+		let d = (circle.x - c.x) * (circle.x - c.x) +
+			(circle.y - c.y) * (circle.y - c.y);
+		if (d <= (circle.r + c.r) * (circle.r + c.r)) {
+			intersect = true;
+			return true;
+		}
+	});
+	return intersect;
+}
+
+function generateRandomCircles(circleRadius, radius, radShift) {
+	let circles = [];
+	let errors = 0;
+	while (errors < 1000)  {
+		let circle = {};
+		circle.x = (Math.random() - 0.5) * circleRadius * 2;
+		circle.y = (Math.random() - 0.5) * circleRadius * 2;
+		circle.r = (Math.random() * radius) + radShift;
+		if (intersects(circles, circle, circleRadius)) {
+			errors++;
+		} else {
+			circles.push(circle);
+		}
+	}
+	let step = radShift / 2;
+	for (var r = radius + radShift; r > step; r -= step) {
+		for (var x = -circleRadius; x < circleRadius; x += r / 4) {
+			for (var y = -circleRadius; y < circleRadius; y += r / 4) {
+				let circle = { x, y, r };
+				if (!intersects(circles, circle, circleRadius)) {
+					circles.push(circle);
+					break;
+				}
+			}
+		}
+	}
+	return circles;
+}
 
 function updateCanvas(L, av, bv, mv) {
 	var canvas = document.getElementById("myCanvas");
 	var ctx = canvas.getContext("2d");
 
-	 
 	for(var a = 0; a < 512; a++) {
 		for(var b = 0; b < 512; b++) {
 			var an = (a / 2 - 127 + av / abCorrection) * mv ;
 			var bn = (b / 2 - 127  + bv / abCorrection) * mv;
 			var Ln = L + LCorrection;
-			
-
-
 			//arr = [a, b, 0]
 			if(imageData) {
 				var ind = (512*b + a);
@@ -211,24 +260,39 @@ function updateCanvas(L, av, bv, mv) {
 				bn = (arr[2]  + bv/abCorrection) * mv 
 			}
 			var arr = XYZ2RGB(LAB2XYZ([Ln, an, bn], 0, 0))
-			
-			if(!eq(XYZ2LAB(RGB2XYZ(arr)), [Ln, an, bn])) {
+			if (!eq(XYZ2LAB(RGB2XYZ(arr)), [Ln, an, bn])) {
 				arr = colorOutOfRange;
 			}
-
-			ctx.fillStyle = 'rgb('+arr[0]+','+arr[1]+','+arr[2]+')'
-			ctx.fillRect(a,b, 1, 1);
+			ctx.fillStyle = 'rgb(' + arr[0] + ',' + arr[1] + ',' + arr[2] + ')'
+			ctx.fillRect(a, b, 1, 1);
 		}
 	}	
 
+	// randomly generate circle
+	if (!imageData) {
+		ctx.strokeStyle = ctx.fillStyle = "rgb(65,65,65)";
+		ctx.fillRect(512, 0, 512, 512);
+		let rgb = XYZ2RGB(LAB2XYZ([54, 0, 0])); // 
+		ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+		console.log(ctx.fillStyle + rgb);
+		let circles = generateRandomCircles(256, 8, 6);
+		circles.forEach(c => {
+			ctx.beginPath();
+			ctx.strokeStyle = "none";
+			
+			ctx.arc(c.x + 512 + 256, c.y + 256, c.r, 0, 2 * Math.PI, false);
+			ctx.fill();
+			ctx.stroke();
+		});
 
-	ctx.strokeStyle="white";
-
+	}
+	// white grid
+	ctx.strokeStyle = "white";
 	ctx.beginPath();
-	ctx.moveTo(0,256);
-	ctx.lineTo(512,256);
-	ctx.moveTo(256,0);
-	ctx.lineTo(256,512);
+	ctx.moveTo(0, 256);
+	ctx.lineTo(512, 256);
+	ctx.moveTo(256, 0);
+	ctx.lineTo(256, 512);
 	ctx.stroke();
 	fullImageData = ctx.getImageData(0, 0, 1024, 512).data;
 }
