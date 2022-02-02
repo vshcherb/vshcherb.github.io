@@ -27,21 +27,22 @@
 
 	<canvas id="testCanvas" width="300" height="300" hidden></canvas>
 	<div>
-		<button type="button" id="next">Next</button>
-		<button type="button" class="res_btn">0</button>
-		<button type="button" class="res_btn">1</button>
-		<button type="button" class="res_btn">2</button>
-		<button type="button" class="res_btn">3</button>
-		<button type="button" class="res_btn">4</button>
-		<button type="button" class="res_btn">5</button>
-		<button type="button" class="res_btn">6</button>
-		<button type="button" class="res_btn">7</button>
-		<button type="button" class="res_btn">8</button>
-		<button type="button" class="res_btn">9</button>
-		<button type="button" id="answer">Answer</button>
+		<button type="button" id="start_test">START TEST!</button>
+		<button type="button" id="next" hidden>Next</button>
+		<button type="button" class="res_btn" hidden>0</button>
+		<button type="button" class="res_btn" hidden>1</button>
+		<button type="button" class="res_btn" hidden>2</button>
+		<button type="button" class="res_btn" hidden>3</button>
+		<button type="button" class="res_btn" hidden>4</button>
+		<button type="button" class="res_btn" hidden>5</button>
+		<button type="button" class="res_btn" hidden>6</button>
+		<button type="button" class="res_btn" hidden>7</button>
+		<button type="button" class="res_btn" hidden>8</button>
+		<button type="button" class="res_btn" hidden>9</button>
+		<button type="button" id="answer" hidden>Answer</button>
 		<span id="answertext"></span>
 	</div>
-	<div>
+	<div id="correctionPalette">
 		<p class="header">Luminance: <span id="text_luminance"></span>
 			<span class="tinput"><input type="range" id="range_luminance" value="50" /></span>
 		</p>
@@ -55,29 +56,32 @@
 			<span class="tinput"><input type="range" id="sat_correction" value="50" /></span>
 		</p>
 	</div>
-	<p>Test:
-		<button type="button" id="lab_btn">LAB Palette</button>
-		Color illusion:
-		<button type="button" class="test_btn" img-data="Test11.png">Color</button>
-		<button type="button" class="test_btn" img-data="Test12.png">Clr-1</button>
-		<button type="button" class="test_btn" img-data="Test13.png">Clr-2</button>
-	</p>
-	<p>Selected test:
-		<button type="button" class="test_btn" img-data="Test.jpg">1</button>
-		<button type="button" class="test_btn" img-data="Test0.png">2</button>
-		<button type="button" class="test_btn" img-data="Test1.png">3</button>
-		<button type="button" class="test_btn" img-data="Test2.png">4</button>
-		<button type="button" class="test_btn" img-data="Test3.png">5</button>
-		<button type="button" class="test_btn" img-data="Test4.png">6</button>
-		<button type="button" class="test_btn" img-data="Test5.png">7</button>
-		<button type="button" class="test_btn" img-data="Test6.png">8</button>
-		<button type="button" class="test_btn" img-data="JTest2.jpg">9</button>
-		<button type="button" class="test_btn" img-data="JTest3.jpg">10</button>
-	</p>
+	<div id="instruments">
+		<p>Test:
+			<button type="button" id="lab_btn">LAB Palette</button>
+			Color illusion:
+			<button type="button" class="test_btn" img-data="Test11.png">Color</button>
+			<button type="button" class="test_btn" img-data="Test12.png">Clr-1</button>
+			<button type="button" class="test_btn" img-data="Test13.png">Clr-2</button>
+		</p>
+		<p>Selected test:
+			<button type="button" class="test_btn" img-data="Test.jpg">1</button>
+			<button type="button" class="test_btn" img-data="Test0.png">2</button>
+			<button type="button" class="test_btn" img-data="Test1.png">3</button>
+			<button type="button" class="test_btn" img-data="Test2.png">4</button>
+			<button type="button" class="test_btn" img-data="Test3.png">5</button>
+			<button type="button" class="test_btn" img-data="Test4.png">6</button>
+			<button type="button" class="test_btn" img-data="Test5.png">7</button>
+			<button type="button" class="test_btn" img-data="Test6.png">8</button>
+			<button type="button" class="test_btn" img-data="JTest2.jpg">9</button>
+			<button type="button" class="test_btn" img-data="JTest3.jpg">10</button>
+		</p>
+	</div>
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.0/jquery.min.js"></script>
 	<script>
 
 		const testCanvasSize = 300;
+		var testStarted = false;
 		var numberAnswer = null;
 		var imageData = null;
 		var fullImageData = null;
@@ -86,21 +90,28 @@
 		var colorOutOfRange = [80, 80, 80];
 		var testIndex = 0;
 		var testLevels = [
-			{ key: 'a+', c: [1, 1, 0], level: 8, passed: 0, failed: 0 },
-			{ key: 'a-', c: [1, -1, 0], level: 8, passed: 0, failed: 0 },
-			{ key: 'b+', c: [1, 0, 1], level: 8, passed: 0, failed: 0 },
-			{ key: 'b-', c: [1, 0, -1], level: 8, passed: 0, failed: 0 },
-			{ key: 'contrast', c: [0, 1, 1], level: 8, passed: 0, failed: 0 },
+			{ key: 'a+', c: [1, 1, 0]},
+			{ key: 'a-', c: [1, -1, 0]},
+			{ key: 'b+', c: [1, 0, 1]},
+			{ key: 'b-', c: [1, 0, -1]},
+			{ key: 'contrast', c: [0, 1, 1]},
 		];
 
-		const tests = [
-			// mixed
-			{ min: [50, -10, -10], max: [60, 10, 10], cmin: [40, -10, -10], cmax: [50, -0, 10] },
-			// brown
-			// { min: [35, 0, 0], max: [65, 0, 0], cmin: [35, -5, 0], cmax: [65, -3, 0] },
+		testLevels.forEach( t => {
+			t.passed = 0;
+			t.index = testIndex++;
+			t.failed = 0;
+			t.maxlevel = 60;
+			t.level = 20;
+			t.minlevel = 1;
+			t.posresults = [];
+			t.negresults = [];
+		});
+		testIndex = 0;
 
-
-		];
+		function levelComplete(t) {
+			return t.maxlevel - t.minlevel < 1 || t.maxlevel / t.minlevel < 1.1;
+		}
 
 		function interpolate(min, max) {
 			let r = [];
@@ -283,31 +294,9 @@
 			var canvas = document.getElementById("myCanvas");
 			var ctx = canvas.getContext("2d");
 
-			for (var a = 0; a < 512; a++) {
-				for (var b = 0; b < 512; b++) {
-					var an = (a / 2 - 127 + av / abCorrection) * mv;
-					var bn = (b / 2 - 127 + bv / abCorrection) * mv;
-					var Ln = L + LCorrection;
-					//arr = [a, b, 0]
-					if (imageData) {
-						var ind = (512 * b + a);
-						var rgb = [imageData[4 * ind], imageData[4 * ind + 1], imageData[4 * ind + 2]];
-						arr = XYZ2LAB(RGB2XYZ(rgb))
-						Ln = arr[0] + L - 50
-						an = (arr[1] + av / abCorrection) * mv
-						bn = (arr[2] + bv / abCorrection) * mv
-					}
-					var arr = XYZ2RGB(LAB2XYZ([Ln, an, bn], 0, 0))
-					if (!eq(XYZ2LAB(RGB2XYZ(arr)), [Ln, an, bn])) {
-						arr = colorOutOfRange;
-					}
-					ctx.fillStyle = 'rgb(' + arr[0] + ',' + arr[1] + ',' + arr[2] + ')'
-					ctx.fillRect(a, b, 1, 1);
-				}
-			}
 
 			// randomly generate circle
-			if (!imageData) {
+			if (testStarted) {
 				let testctx = document.getElementById("testCanvas").getContext("2d");
 				testctx.strokeStyle = testctx.fillStyle = "black";
 				testctx.fillRect(0, 0, testCanvasSize, testCanvasSize);
@@ -320,65 +309,98 @@
 				let imgdata = testctx.getImageData(0, 0, testCanvasSize, testCanvasSize).data;
 
 				ctx.strokeStyle = ctx.fillStyle = "rgb(65,65,65)";
-				ctx.fillRect(512, 0, 512, 512);
+				ctx.fillRect(0, 0, 512, 512);
 				// let test = tests[Math.floor(Math.random() * tests.length)];
 				testIndex = Math.floor(Math.random() * testLevels.length);
 				let tl = testLevels[testIndex];
-				if (tl.passlevel === tl.level) {
+				if (levelComplete(tl)) {
 					testLevels.forEach(ts => {
-						if (ts.passlevel !== ts.level) {
+						if (!levelComplete(ts)) {
 							tl = ts;
+							testIndex = tl.index;
 							return true;
 						}
 					})
 				}
-				if (tl.passlevel === tl.level) {
-					answer("ALL COMPLETED!!! " + printTestLevels());
+				//tl.level = Math.round(Math.random() * (tl.maxlevel - tl.minlevel) + tl.minlevel);
+				if (tl.pass &&  tl.pass > 0) {
+					tl.level = (tl.level + tl.minlevel) / 2;
+				} else if (tl.pass && tl.pass < 0) {
+					tl.level = (tl.level + tl.maxlevel) / 2;
 				}
-				let test = {
-					cmin: [tl.c[0] * 40, Math.round(tl.c[1] * 1 * tl.level), Math.round(tl.c[2] * 1 * tl.level)],
-					cmax: [tl.c[0] * 65, Math.round(tl.c[1] * 1.5 * tl.level), Math.round(tl.c[2] * 1.5 * tl.level)],
-					min: [tl.c[0] * 40, 0, 0],
-					max: [tl.c[0] * 65, 0, 0]
-				};
-				if (tl.key === 'contrast') {
-					test = {
-						cmin: [50 - tl.level, -10, -10],
-						cmax: [50, 10, 10],
-						min: [50, -10, -10],
-						max: [50 + tl.level, 10, 10]
+				if (levelComplete(tl)) {
+					answer("TEST COMPLETED: " + printTestLevels());
+					startTestRefresh(false);
+				} else {
+					answer(printTestLevels(tl));
+					let test = {
+						cmin: [tl.c[0] * 40, Math.round(tl.c[1] * 1 * tl.level), Math.round(tl.c[2] * 1 * tl.level)],
+						cmax: [tl.c[0] * 65, Math.round(tl.c[1] * 1.5 * tl.level), Math.round(tl.c[2] * 1.5 * tl.level)],
+						min: [tl.c[0] * 40, 0, 0],
+						max: [tl.c[0] * 65, 0, 0]
 					};
-				}
-
-				let circles = generateRandomCircles(256, 8, 6);
-				circles.forEach(c => {
-					let tx = Math.round((c.x / 512.0 + 0.5) * testCanvasSize);
-					let ty = Math.round((c.y / 512.0 + 0.5) * testCanvasSize);
-					let clr = imgdata[4 * (ty * testCanvasSize + tx) + 1];
-					var lab;
-					if (clr > 0) {
-						lab = interpolate(test.cmin, test.cmax);
-					} else {
-						lab = interpolate(test.min, test.max);
+					if (tl.key === 'contrast') {
+						test = {
+							cmin: [50 - tl.level, -10, -10],
+							cmax: [50, 10, 10],
+							min: [50, -10, -10],
+							max: [50 + tl.level, 10, 10]
+						};
 					}
-					let rgb = XYZ2RGB(LAB2XYZ(lab));
-					ctx.beginPath();
-					ctx.strokeStyle = "none";
-					ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-					ctx.arc(c.x + 512 + 256, c.y + 256, c.r, 0, 2 * Math.PI, false);
-					ctx.fill();
-					ctx.stroke();
-				});
 
+					let circles = generateRandomCircles(256, 8, 6);
+					circles.forEach(c => {
+						let tx = Math.round((c.x / 512.0 + 0.5) * testCanvasSize);
+						let ty = Math.round((c.y / 512.0 + 0.5) * testCanvasSize);
+						let clr = imgdata[4 * (ty * testCanvasSize + tx) + 1];
+						var lab;
+						if (clr > 0) {
+							lab = interpolate(test.cmin, test.cmax);
+						} else {
+							lab = interpolate(test.min, test.max);
+						}
+						let rgb = XYZ2RGB(LAB2XYZ(lab));
+						ctx.beginPath();
+						ctx.strokeStyle = "none";
+						ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+						ctx.arc(c.x + 256, c.y + 256, c.r, 0, 2 * Math.PI, false);
+						ctx.fill();
+						ctx.stroke();
+					});
+				}
+			} else {
+				for (var a = 0; a < 512; a++) {
+					for (var b = 0; b < 512; b++) {
+						var an = (a / 2 - 127 + av / abCorrection) * mv;
+						var bn = (b / 2 - 127 + bv / abCorrection) * mv;
+						var Ln = L + LCorrection;
+						//arr = [a, b, 0]
+						if (imageData) {
+							var ind = (512 * b + a);
+							var rgb = [imageData[4 * ind], imageData[4 * ind + 1], imageData[4 * ind + 2]];
+							arr = XYZ2LAB(RGB2XYZ(rgb))
+							Ln = arr[0] + L - 50
+							an = (arr[1] + av / abCorrection) * mv
+							bn = (arr[2] + bv / abCorrection) * mv
+						}
+						var arr = XYZ2RGB(LAB2XYZ([Ln, an, bn], 0, 0))
+						if (!eq(XYZ2LAB(RGB2XYZ(arr)), [Ln, an, bn])) {
+							arr = colorOutOfRange;
+						}
+						ctx.fillStyle = 'rgb(' + arr[0] + ',' + arr[1] + ',' + arr[2] + ')'
+						ctx.fillRect(a, b, 1, 1);
+					}
+				}
+				// white grid
+				ctx.strokeStyle = "white";
+				ctx.beginPath();
+				ctx.moveTo(0, 256);
+				ctx.lineTo(512, 256);
+				ctx.moveTo(256, 0);
+				ctx.lineTo(256, 512);
+				ctx.stroke();
 			}
-			// white grid
-			ctx.strokeStyle = "white";
-			ctx.beginPath();
-			ctx.moveTo(0, 256);
-			ctx.lineTo(512, 256);
-			ctx.moveTo(256, 0);
-			ctx.lineTo(256, 512);
-			ctx.stroke();
+
 			fullImageData = ctx.getImageData(0, 0, 1024, 512).data;
 		}
 
@@ -479,35 +501,44 @@
 			$("#answertext").text(val);
 		}
 
-		function printTestLevels() {
+		function printTestLevels(tl ) {
 			var str = '';
 			testLevels.forEach(t => {
 				let ps = t.passed;
 				let all = t.failed + t.passed;
-				if (t.passlevel === t.level) {
-					str += t.key + "  " + t.passlevel + "[DONE]! ";
-				} else {
-					if (all >= 3 && ps * 2 > all && t.level > 1) {
-						t.passlevel = t.level;
-						t.level = t.level / 2;
-						t.passed = 0;
-						t.failed = 0;
-					} else if ((all > 3 && ps * 3 < all) ||
-						(all > 6 && ps * 2 < all)) {
-						if (t.level >= 16) {
-							t.level = t.level * 3 / 2;
-						} else if (t.level >= 70) {
-							t.passlevel = t.level = 70;
-						} else {
-							t.level = t.level * 2;
-						}
-						t.passed = 0;
-						t.failed = 0;
-					}
-					str += t.key + " " + t.level + " [" + t.passed + "/" + (t.failed + t.passed) + "] ";
+				if (t === tl) {
+					str += '*';
 				}
+				if (levelComplete(t)) {
+					str += t.key + " " + t.level.toFixed(1) + " [DONE, " + t.passed + "/" + (t.failed + t.passed) + " ]! ";
+				} else if (t.level) {
+					str += t.key + " " + t.level.toFixed(1) ;
+					// str += " (" + t.minlevel.toFixed(1) + "-" + t.maxlevel.toFixed(1) + ")";
+					str += " [" + t.passed + " / " + (t.failed + t.passed) + "] ";
+				}
+				
 			});
 			return str;
+		}
+
+		function pass(ps) {
+			let tl = testLevels[testIndex];
+			tl.pass = ps;
+			if(ps > 0) { 
+				tl.passed++;
+				tl.posresults.push(tl.level);
+			} else { 
+				tl.failed++;
+				tl.negresults.push(-tl.level);
+			}
+			if (tl.posresults.length > 1) {
+				tl.posresults = tl.posresults.sort((a, b) => a - b);
+				tl.maxlevel = tl.posresults[1];	
+			}
+			if (tl.negresults.length > 1) {
+				tl.negresults = tl.negresults.sort((a, b) => a - b);
+				tl.minlevel = Math.abs(tl.negresults[1]);
+			}
 		}
 
 		function registerTooltip() {
@@ -519,22 +550,44 @@
 			var t1 = new ToolTip(canvas, region, "This is a tool-tip", 150, 3000);
 		}
 
+		function startTestRefresh(start) {
+			testStarted = start;
+			if (start) {
+				$('.res_btn').each(function () { let obj = $(this); obj.show(); });
+				$('#next').show(); 
+				$('#answer').show(); 
+
+				$('#start_test').hide(); 
+				$('#correctionPalette').hide();
+				$('#instruments').hide();
+			} else {
+				$('.res_btn').each(function () { let obj = $(this); obj.hide(); });
+				$('#next').hide(); 
+				$('#answer').hide(); 
+
+				$('#start_test').show(); 
+				$('#correctionPalette').show();
+				$('#instruments').show();
+			}
+			refresh();
+		}
+
 		$(document).ready(function () {
 			refresh()
 			$('#lab_btn').on('click', function () {
 				imageData = null;
-				refresh();
+				startTestRefresh(false);
+			});
+			$('#start_test').on('click', function () {
+				startTestRefresh(true);
 			});
 			$('.res_btn').each(function () {
 				let obj = $(this);
 				obj.on('click', function () {
 					if (obj.text() === numberAnswer + '') {
-						testLevels[testIndex].passed++;
-						answer(printTestLevels());
+						pass(1);
 					} else {
-						testLevels[testIndex].failed++;
-						// answer('wrong: ' + numberAnswer);
-						answer(printTestLevels());
+						pass(-1);
 					}
 					refresh();
 				});
@@ -554,11 +607,8 @@
 					}
 				});
 			});
-
-
 			$('#next').click(() => {
-				testLevels[testIndex].failed++;
-				answer(printTestLevels());
+				pass(-1);
 				refresh();
 			})
 			$('#answer').click(() => answer('ANSWER: ' + numberAnswer));
