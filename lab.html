@@ -27,7 +27,10 @@
 
 	<canvas id="testCanvas" width="300" height="300" hidden></canvas>
 	<div>
-		<button type="button" id="start_test">START TEST!</button>
+		<button type="button" id="start_test">START All TESTS (50 questions)!</button>
+		<button type="button" id="start_test_a">TEST Only A+- - red/green!</button>
+		<button type="button" id="start_test_b">TEST Only B+- - blue/yellow!</button>
+		<button type="button" id="start_test_c">TEST Only Light Contrast!</button>
 		<button type="button" id="next" hidden>Next</button>
 		<button type="button" class="res_btn" hidden>0</button>
 		<button type="button" class="res_btn" hidden>1</button>
@@ -89,19 +92,20 @@
 		var LCorrection = 0.0;
 		var colorOutOfRange = [80, 80, 80];
 		var testIndex = 0;
-		var testLevels = [
+		const  alltestLevels = [
 			{ key: 'a+', c: [1, 1, 0]},
 			{ key: 'a-', c: [1, -1, 0]},
 			{ key: 'b+', c: [1, 0, 1]},
 			{ key: 'b-', c: [1, 0, -1]},
 			{ key: 'contrast', c: [0, 1, 1]},
 		];
+		let testLevels = alltestLevels;
 
 		testLevels.forEach( t => {
 			t.passed = 0;
 			t.index = testIndex++;
 			t.failed = 0;
-			t.maxlevel = 60;
+			t.maxlevel = 100;
 			t.level = 20;
 			t.minlevel = 1;
 			t.posresults = [];
@@ -559,6 +563,9 @@
 				$('#answer').show(); 
 
 				$('#start_test').hide(); 
+				$('#start_test_a').hide(); 
+				$('#start_test_b').hide(); 
+				$('#start_test_c').hide(); 
 				$('#correctionPalette').hide();
 				$('#instruments').hide();
 			} else {
@@ -567,6 +574,9 @@
 				$('#answer').hide(); 
 
 				$('#start_test').show(); 
+				$('#start_test_a').show();
+				$('#start_test_b').show();
+				$('#start_test_c').show(); 
 				$('#correctionPalette').show();
 				$('#instruments').show();
 			}
@@ -580,6 +590,19 @@
 				startTestRefresh(false);
 			});
 			$('#start_test').on('click', function () {
+				testLevels = alltestLevels;
+				startTestRefresh(true);
+			});
+			$('#start_test_a').on('click', function () {
+				testLevels = [ alltestLevels[0],  alltestLevels[1]];
+				startTestRefresh(true);
+			});
+			$('#start_test_b').on('click', function () {
+				testLevels = [alltestLevels[2], alltestLevels[3]];
+				startTestRefresh(true);
+			});
+			$('#start_test_c').on('click', function () {
+				testLevels = [alltestLevels[4]];
 				startTestRefresh(true);
 			});
 			$('.res_btn').each(function () {
