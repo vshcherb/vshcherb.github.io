@@ -61,7 +61,6 @@ function main() {
   `;
 
     // Fragment shader program
-
     const fsSource = `
     varying lowp vec4 vColor;
     varying highp vec2 vTextureCoord;
@@ -181,22 +180,23 @@ function initBuffers(gl) {
         }
     }
     // TOP and bottom TODO
-    // for (var j = -1; j <= 1; j += 2) {
-    //     for (var i = 0; i < sides; i++) {
-    //         var lonl = i * rotAngle;
-    //         var lonr = (i + 1) * rotAngle;
-    //         positions = positions.concat([0, j * h, 0,
-    //             Math.sin(lonl) * Math.sin(EarthDelta), j * Math.cos(EarthDelta), Math.cos(lonl) * Math.sin(EarthDelta),
-    //             Math.sin(lonr) * Math.sin(EarthDelta), j * Math.cos(EarthDelta), Math.cos(lonr) * Math.sin(EarthDelta)
-    //         ]);
-    //         indices = indices.concat([ind, ind + 1, ind + 2]);
-    //         ind += 3;
-    //         // Repeat each color 3 times for the four vertices of the face
-    //         const c = [0.9, 0.9, 0.9, 0.9];
-    //         colors = colors.concat(c, c, c);
-    //         vertCount += 3;
-    //     }
-    // }
+    for (var j = -1; j <= 1; j += 2) {
+        for (var i = 0; i < sides; i++) {
+            var lonl = i * rotAngle;
+            var lonr = (i + 1) * rotAngle;
+            positions = positions.concat([0, j * h, 0,
+                Math.sin(lonl) * Math.sin(EarthDelta), j * Math.cos(EarthDelta), Math.cos(lonl) * Math.sin(EarthDelta),
+                Math.sin(lonr) * Math.sin(EarthDelta), j * Math.cos(EarthDelta), Math.cos(lonr) * Math.sin(EarthDelta)
+            ]);
+            indices = indices.concat([ind, ind + 1, ind + 2]);
+            ind += 3;
+            // Repeat each color 3 times for the four vertices of the face
+            const c = [0.9, 0.9, 0.9, 0.9];
+            colors = colors.concat(c, c, c);
+            textureCoordinates = textureCoordinates.concat([0, 0, 0, 0, 0, 0, 0, 0]);
+            vertCount += 3;
+        }
+    }
     
     // Now pass the list of positions into WebGL to build the
     // shape. We do this by creating a Float32Array from the
