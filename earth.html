@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>WebGL Demo</title>
+    <link rel="stylesheet" href="css/earth.css" type="text/css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"
+        integrity="sha512-zhHQR0/H5SEBL3Wn6yYSaTTZej12z0hVZKOv3TwCUXT1z5qeqGcXJLLrbERYRScEDDpYIJhPC1fk31gqR783iQ=="
+        crossorigin="anonymous" defer>
+        </script>
+    <script src="js/earth.js" defer></script>
+</head>
+
+<body>
+    <canvas id="glcanvas" width="640" height="480"></canvas>
+    <div class="controls">
+        <h3>Rendering</h3>
+        <select id="drawMode">
+            <option disabled selected>Draw mode</option>
+            <option value="POINTS">Points</option>
+            <option value="LINES">Lines</option>
+            <option value="LINE_STRIP">Line Strip</option>
+            <option value="LINE_LOOP">Line Loop</option>
+            <option value="TRIANGLES">Triangles *</option>
+            <option value="TRIANGLE_STRIP">Triangle Strip</option>
+            <option value="TRIANGLE_FAN">Triangle Fan</option>
+        </select>
+    
+        <select id="quality">
+            <option disabled selected>Quality</option>
+            <option value="0">Basic</option>
+            <option value="1">Simple</option>
+            <option value="2">Better</option>
+            <option value="3">Best *</option>
+        </select>
+        <span>* denotes default values</span>
+    
+        <h3>Zoom</h3>
+        <div class="sliderGroup clearfix">
+            <input type="text" id="sliderInputZoom" disabled />
+            <input type="range" id="sliderZoom" min="-15" max="0" step="0.001"
+                oninput="updateUIParameter('Z:','sliderZoom','sliderInputZoom')" />
+        </div>
+    </div>
+</body>
+
+</html>
