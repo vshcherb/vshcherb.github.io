@@ -2,19 +2,21 @@
 // Some constants
 const h = 1.01; // earth skew
 const EarthDelta = Math.PI / 180 * 5; // up to 85 (Mercatoor projection)
+const HiddenCanvasSize = 2048;
 
 const CONFIG = {
     loadTexture: true,
     updateBuffer: false,
-    textureZoom: 0,
+    textureZoom: 3,
+    zoom: 5,
     // defaultURL: 'https://tile.osmand.net',
     defaultURL: 'https://tile.openstreetmap.org',
-    animationSpeed: 0.001,
+    animationSpeed: 1,
     eyeDist: 0,
     eyePosition : -12,
     drawMode: 'TRIANGLES',
     cubeRotation: 0.0,
-    zoom: 3,
+    
     fieldOfView: (30 * Math.PI) / 180, // in radians
     zNear: 0.1,
     zFar: 100,
@@ -34,7 +36,7 @@ function hsv2rgb(h, s, v, a) {
 // Start here
 function main() {
     const canvas = document.querySelector("#glcanvas");
-    const gl =canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
     // If we don't have a GL context, give up now
     if (!gl) {
         alert("Unable to initialize WebGL. Your browser or machine may not support it.");
@@ -120,7 +122,7 @@ function main() {
             // gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
             CONFIG.loadTexture = false;
         }
-        now *= CONFIG.animationSpeed; // convert to seconds
+        now *= CONFIG.animationSpeed / 1000; // convert to seconds
         const deltaTime = now - then;
         then = now;
         drawScene(gl, programInfo, buffers, deltaTime, texture);
@@ -445,7 +447,9 @@ function loadShader(gl, type, source) {
 function loadTexture(gl, url, zoom) {
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
-
+    const hdcanvas = document.querySelector("#hiddencanvas");
+    const ctx2D = hdcanvas.getContext("2d");
+    
     // Because images have to be download over the internet
     // they might take a moment until they are ready.
     // Until then put a single pixel in the texture so we can
@@ -460,22 +464,33 @@ function loadTexture(gl, url, zoom) {
     const srcType = gl.UNSIGNED_BYTE;
     const pixel = new Uint8Array([0, 0, 255, 255]); // opaque blue
     gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, srcFormat, srcType,pixel);
-
-    const image = new Image();
-    image.onload = function () {
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
-        // WebGL1 has different requirements for power of 2 images
-        // vs non power of 2 images so check if the image is a  power of 2 in both dimensions.
-        gl.generateMipmap(gl.TEXTURE_2D);
-        // No, it's not a power of 2. Turn off mips and set wrapping to clamp to edge
-        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-
-    };
-    image.crossOrigin = "anonymous";
-    image.src = url + "/0/0/0.png";
+    let loadedImages = 0;
+    const side = 1 << zoom;
+    const scale = HiddenCanvasSize / (side);
+    for(var x = 0; x < side; x++) {
+        for (var y = 0; y < side; y++) {
+            const xT = x;
+            const yT = y;
+            const image = new Image();
+            image.onload = function () {
+                ctx2D.drawImage(image, xT * scale, yT * scale, scale, scale);
+                loadedImages = loadedImages + 1;
+                if (loadedImages == side * side) {
+                    gl.bindTexture(gl.TEXTURE_2D, texture);
+                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, hdcanvas);
+                    // WebGL1 has different requirements for power of 2 images
+                    // vs non power of 2 images so check if the image is a  power of 2 in both dimensions.
+                    gl.generateMipmap(gl.TEXTURE_2D);
+                    // No, it's not a power of 2. Turn off mips and set wrapping to clamp to edge
+                    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                }
+            };
+            image.crossOrigin = "anonymous";
+            image.src = url + "/" + zoom + "/" + x + "/" + y + ".png";
+        }
+    }   
     return texture;
 }
 
@@ -484,7 +499,7 @@ function isPowerOf2(value) {
 }
 
 
-function registerSlider(idParam, uiPrefix, idInput, idLabel, updateBuffer) {
+function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
     var slider = document.getElementById(idInput);
     var sliderText = document.getElementById(idLabel);
     slider.value = CONFIG[idParam];
@@ -492,8 +507,8 @@ function registerSlider(idParam, uiPrefix, idInput, idLabel, updateBuffer) {
     slider.addEventListener('input', function () {
         //slider.value = CONFIG[idParam].toString();
         CONFIG[idParam] = parseFloat(slider.value);
-        if (updateBuffer) {
-            CONFIG.updateBuffer = true;
+        if (flagParam) {
+            CONFIG[flagParam] = true;
         }
         sliderText.value = uiPrefix + CONFIG[idParam].toString();
         // return app.SetRotation(sliderX.getAttribute('data-axis'), parseFloat(sliderX.value)); 
@@ -505,9 +520,12 @@ function addListeners() {
     drawMode.addEventListener('change', function (e) { 
         CONFIG.drawMode = drawMode.options[drawMode.selectedIndex].value;
     });
-    registerSlider('zoom', 'Z:', 'sliderZoom', 'sliderZoomText', true);
+    registerSlider('animationSpeed', 'SPD:', 'sliderAnimationSpeed', 'sliderAnimationSpeedText');
+    registerSlider('zoom', 'Z:', 'sliderZoom', 'sliderZoomText', 'updateBuffer');
     registerSlider('zNear', 'zNear:', 'sliderZNear', 'sliderZNearText');
     registerSlider('zFar', 'zFar:', 'sliderZFar', 'sliderZFarText');
     registerSlider('eyePosition', 'EYE:', 'sliderEyePos', 'sliderEyePosText');
+    
+    registerSlider('textureZoom', 'TZoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture' );
     
 }
