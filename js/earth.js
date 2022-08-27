@@ -1,23 +1,31 @@
 
 // Some constants
-const EarthSkew = 6378137.0 / 6356752.0; // 1.003; // earth skew
-const EarthDelta = Math.PI / 180 * 5; // up to 85 (Mercatoor projection)
-const HiddenCanvasSize = 2048;
+const EarthRadiusEquator = 6378.137;
+const EarthRadiusPolar = 6356.752;
+const EarthSkew = EarthRadiusPolar / EarthRadiusPolar; // 0.997; // earth skew
+const HiddenCanvasSize = 4096;
+
 
 const CONFIG = {
     loadTexture: true,
     updateBuffer: false,
+
+    eyePosition: 20000,
+    eyeLat: 52.37313,
+    eyeLon: 4.89875,
+    rotLatSpeed: 1,
+    rotLatDir: 1,
+    rotLonSpeed: 1,
+
     textureZoom: 3,
-    zoom: 5,
+    vertexZoom: 5,
     // defaultURL: 'https://tile.osmand.net',
     defaultURL: 'https://tile.openstreetmap.org',
-    animationSpeed: 1,
-    eyeDist: 0,
-    eyePosition : -10,
+    
     drawMode: 'TRIANGLES',
-    cubeRotation: 0.0,
+    
     fieldOfView: (30 * Math.PI) / 180, // in radians
-    zNear: 0.1,
+    zNear: 0.0001,
     zFar: 100
 };
 
@@ -61,14 +69,13 @@ function main() {
     attribute vec4 aVertexColor;
     attribute vec2 aTextureCoord;
 
-    uniform mat4 uModelViewMatrix;
     uniform mat4 uProjectionMatrix;
-
+    uniform mat4 uRotationMatrix;
     varying lowp vec4 vColor;
     varying highp vec2 vTextureCoord;
 
     void main(void) {
-      gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+      gl_Position = uProjectionMatrix * uRotationMatrix * aVertexPosition;
       vColor = aVertexColor;
       vTextureCoord = aTextureCoord;
     }
@@ -103,7 +110,7 @@ function main() {
         },
         uniformLocations: {
             projectionMatrix: gl.getUniformLocation(shaderProgram, "uProjectionMatrix"),
-            modelViewMatrix: gl.getUniformLocation(shaderProgram, "uModelViewMatrix"),
+            rotationMatrix: gl.getUniformLocation(shaderProgram, "uRotationMatrix"),
             uSampler: gl.getUniformLocation(shaderProgram, "uSampler"),
         },
     };
@@ -134,23 +141,20 @@ function main() {
             // gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
             CONFIG.loadTexture = false;
         }
-        now *= CONFIG.animationSpeed / 1000; // convert to seconds
         const deltaTime = now - then;
         then = now;
-        drawScene(gl, programInfo, buffers, deltaTime, texture);
+        drawScene(gl, programInfo, buffers, deltaTime / 1000.0, texture);
         requestAnimationFrame(render);
     }
     requestAnimationFrame(render);
 }
 
-// Initialize the buffers we'll need. For this demo, we just
-// have one object -- a simple three-dimensional cube.
-//
+// Initialize the buffers we'll need.
 function initBuffers(gl) {
     // Now set up the colors for the faces. We'll use solid colors
     // for each face.
-    const z = CONFIG.zoom;
-    const sides = 1 << CONFIG.zoom;
+    const z = CONFIG.vertexZoom;
+    const sides = 1 << CONFIG.vertexZoom;
     const faceColors = [];
     for (var cind = 0; cind < sides * 2; cind++) {
         faceColors.push(hsv2rgb((360 / (sides * 2)) * cind, 0.9, 0.9, 1));
@@ -164,7 +168,6 @@ function initBuffers(gl) {
     let textureCoordinates = [];
     
     const rotAngle = 2 *  Math.PI / sides; // in radians
-    const rotAngleLat = (Math.PI - 2 * EarthDelta) / sides; // in radians
     const step = 1.0 / sides;
     for(var i = 0; i < sides; i++) {
         for (var j = 0; j < sides; j++) {
@@ -177,12 +180,11 @@ function initBuffers(gl) {
             const latb = Math.PI / 2 - getLatitudeFromTile(z, j + 1) / (180 / Math.PI);
             const lonl = getLongitudeFromTile(z, i) / (180 / Math.PI) + Math.PI;
             const lonr = getLongitudeFromTile(z, i + 1) / (180 / Math.PI) + Math.PI;
-            console.log(latt + ' ' + latb + ' ' + lonl + ' ' + lonr);
             positions = positions.concat([
-                Math.sin(lonl) * Math.sin(latt), Math.cos(latt), Math.cos(lonl) * Math.sin(latt),
-                Math.sin(lonl) * Math.sin(latb), Math.cos(latb), Math.cos(lonl) * Math.sin(latb),
-                Math.sin(lonr) * Math.sin(latt), Math.cos(latt), Math.cos(lonr) * Math.sin(latt),
-                Math.sin(lonr) * Math.sin(latb), Math.cos(latb), Math.cos(lonr) * Math.sin(latb),
+                Math.sin(lonl) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonl) * Math.sin(latt),
+                Math.sin(lonl) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonl) * Math.sin(latb),
+                Math.sin(lonr) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonr) * Math.sin(latt),
+                Math.sin(lonr) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonr) * Math.sin(latb),
             ]);
             textureCoordinates = textureCoordinates.concat([
                 // 0, 0, step * i, 0, step * i, step * j, 0, step * j,
@@ -207,8 +209,8 @@ function initBuffers(gl) {
             // let topAngle = EarthDelta;
             let topAngle = Math.PI / 2 - getLatitudeFromTile(z, 0) / (180 / Math.PI);
             positions = positions.concat([0, j * EarthSkew, 0,
-                Math.sin(lonl) * Math.sin(topAngle), j * Math.cos(topAngle), Math.cos(lonl) * Math.sin(topAngle),
-                Math.sin(lonr) * Math.sin(topAngle), j * Math.cos(topAngle), Math.cos(lonr) * Math.sin(topAngle)
+                Math.sin(lonl) * Math.sin(topAngle), EarthSkew * j * Math.cos(topAngle), Math.cos(lonl) * Math.sin(topAngle),
+                Math.sin(lonr) * Math.sin(topAngle), EarthSkew * j * Math.cos(topAngle), Math.cos(lonr) * Math.sin(topAngle)
             ]);
             indices = indices.concat([ind, ind + 1, ind + 2]);
             ind += 3;
@@ -276,46 +278,47 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     // note: glmatrix.js always has the first argument
     // as the destination to receive the result.
    // mat4.perspective(projectionMatrix, fieldOfView, aspect, zNear, zFar);
-    const eye = vec3.fromValues(0, 0, CONFIG.eyePosition + Math.sin(CONFIG.eyeDist) * 2);
-    CONFIG.eyeDist += deltaTime / (15 / Math.PI) ;
+    const eye = vec3.fromValues(0, 0, - 1 - (CONFIG.eyePosition / EarthRadiusEquator));
     const lookAt = vec3.fromValues(0, 0, 0);
-    var lookAtMatrix = mat4.create();
-    var perspectiveMatrix = mat4.create();
+    const lookAtMatrix = mat4.create();
+    const perspectiveMatrix = mat4.create();
+    
     mat4.lookAt(lookAtMatrix, eye, lookAt, vec3.fromValues(0, 1, 0));
     mat4.perspective(perspectiveMatrix, CONFIG.fieldOfView, aspect, CONFIG.zNear, CONFIG.zFar);
     mat4.multiply(projectionMatrix, lookAtMatrix, projectionMatrix);
     mat4.multiply(projectionMatrix, perspectiveMatrix, projectionMatrix);
 
-    // Set the drawing position to the "identity" point, which is
-    // the center of the scene.
-    const modelViewMatrix = mat4.create();
-
-    // Now move the drawing position a bit to where we want to
-    // start drawing the square.
-
-    mat4.translate(
-        modelViewMatrix, // destination matrix
-        modelViewMatrix, // matrix to translate
-        [-0.0, 0.0, -6.0]
-    ); // amount to translate
-    // mat4.rotate(
-    //     modelViewMatrix, // destination matrix
-    //     modelViewMatrix, // matrix to rotate
-    //     CONFIG.cubeRotation, // amount to rotate in radians
-    //     [0, 0, 1]
-    // ); // axis to rotate around (Z)
+    const rotationMatrix = mat4.create();
+    const zoomRotCoeef = CONFIG.eyePosition / 8000;
+    CONFIG.eyeLon += deltaTime * CONFIG.rotLonSpeed * zoomRotCoeef;
+    if (CONFIG.eyeLon > 180) {
+        CONFIG.eyeLon -= 360;
+    }
+    CONFIG.eyeLat += CONFIG.rotLatDir * deltaTime * CONFIG.rotLatSpeed * zoomRotCoeef;
+    if (CONFIG.rotLatSpeed > 0 || CONFIG.rotLonSpeed > 0) {
+        updateText();
+    }
+    if (CONFIG.eyeLat >= 90) {
+        CONFIG.eyeLat = 90;
+        CONFIG.rotLatDir = -1;
+    }
+    if (CONFIG.eyeLat <= -90) {
+        CONFIG.eyeLat = -90;
+        CONFIG.rotLatDir = 1;
+    }
     mat4.rotate(
-        modelViewMatrix, // destination matrix
-        modelViewMatrix, // matrix to rotate
-        CONFIG.cubeRotation * 0.3, // amount to rotate in radians
-        [0, 1, 0]
-    ); // axis to rotate around (Y)
-    mat4.rotate(
-        modelViewMatrix, // destination matrix
-        modelViewMatrix, // matrix to rotate
-        CONFIG.cubeRotation * 0.3, // amount to rotate in radians
+        rotationMatrix, // destination matrix
+        rotationMatrix, // matrix to rotate
+        - CONFIG.eyeLat / (180 / Math.PI), // amount to rotate in radians
         [1, 0, 0]
     ); // axis to rotate around (X)
+
+    mat4.rotate(
+        rotationMatrix, // destination matrix
+        rotationMatrix, // matrix to rotate
+        - CONFIG.eyeLon / (180 / Math.PI), // amount to rotate in radians
+        [0, 1, 0]
+    ); // axis to rotate around (Z)
 
     // Tell WebGL how to pull out the positions from the position
     // buffer into the vertexPosition attribute
@@ -382,17 +385,8 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     // Tell WebGL to use our program when drawing
     gl.useProgram(programInfo.program);
     // Set the shader uniforms
-    gl.uniformMatrix4fv(
-        programInfo.uniformLocations.projectionMatrix,
-        false,
-        projectionMatrix
-    );
-    gl.uniformMatrix4fv(
-        programInfo.uniformLocations.modelViewMatrix,
-        false,
-        modelViewMatrix
-    );
-
+    gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, false, projectionMatrix);
+    gl.uniformMatrix4fv(programInfo.uniformLocations.rotationMatrix, false, rotationMatrix);
     // Specify the textures
     // Tell WebGL we want to affect texture unit 0
     gl.activeTexture(gl.TEXTURE0);
@@ -406,8 +400,6 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
         const offset = 0;
         gl.drawElements(gl[CONFIG.drawMode], buffers.verticesCount, type, offset);
     }
-    // Update the rotation for the next draw
-    CONFIG.cubeRotation += deltaTime;
 }
 
 //
@@ -518,6 +510,12 @@ function isPowerOf2(value) {
     return (value & (value - 1)) == 0;
 }
 
+function updateText() {
+    var latText = document.getElementById('latText');
+    var lonText = document.getElementById('lonText');
+    latText.value = 'LAT: ' + CONFIG.eyeLat.toFixed(5);
+    lonText.value = 'LON: ' + CONFIG.eyeLon.toFixed(5);
+}
 
 function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
     var slider = document.getElementById(idInput);
@@ -531,8 +529,10 @@ function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
             CONFIG[flagParam] = true;
         }
         sliderText.value = uiPrefix + CONFIG[idParam].toString();
-        // return app.SetRotation(sliderX.getAttribute('data-axis'), parseFloat(sliderX.value)); 
+        // action can cause reevaluate
+        // updateText();        
     });
+    return slider;
 }
 
 function addListeners() {
@@ -540,12 +540,30 @@ function addListeners() {
     drawMode.addEventListener('change', function (e) { 
         CONFIG.drawMode = drawMode.options[drawMode.selectedIndex].value;
     });
-    registerSlider('animationSpeed', 'SPD:', 'sliderAnimationSpeed', 'sliderAnimationSpeedText');
-    registerSlider('zoom', 'Z:', 'sliderZoom', 'sliderZoomText', 'updateBuffer');
+    registerSlider('rotLonSpeed', 'ROT LON:', 'sliderRotLonSpeed', 'sliderRotLonSpeedText');
+    registerSlider('rotLatSpeed', 'ROT LAT:', 'sliderRotLatSpeed', 'sliderRotLatSpeedText');
+
+    let eyeZoom = registerSlider('eyePosition', 'CAM DIST km:', 'sliderEyePos', 'sliderEyePosText');
+    eyeZoom.addEventListener('input', function () {
+        if (CONFIG.eyePosition < 5000 && eyeZoom.step > 10) {
+            eyeZoom.min = 10;
+            eyeZoom.max = 10000;
+            eyeZoom.step = 10;
+            eyeZoom.value = 4000;
+        }
+        if (CONFIG.eyePosition >= 9000 && eyeZoom.step == 10) {
+            eyeZoom.min = 4000;
+            eyeZoom.max = 100000;
+            eyeZoom.step = 1000;
+            eyeZoom.value = 9000;
+        }
+    });
+
     registerSlider('zNear', 'zNear:', 'sliderZNear', 'sliderZNearText');
     registerSlider('zFar', 'zFar:', 'sliderZFar', 'sliderZFarText');
-    registerSlider('eyePosition', 'EYE:', 'sliderEyePos', 'sliderEyePosText');
+
+    registerSlider('vertexZoom', 'Vertex Zoom:', 'sliderZoom', 'sliderZoomText', 'updateBuffer');
+    registerSlider('textureZoom', 'Tiles Zoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture' );
     
-    registerSlider('textureZoom', 'TZoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture' );
-    
+    updateText();
 }
