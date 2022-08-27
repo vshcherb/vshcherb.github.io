@@ -2,21 +2,20 @@
 // Some constants
 const h = 1.01; // earth skew
 const EarthDelta = Math.PI / 180 * 5; // up to 85 (Mercatoor projection)
-const colorsNum = 32;
 
 const CONFIG = {
+    updateBuffer: false,
     eyeDist: 0,
+    drawMode: 'TRIANGLES',
     cubeRotation: 0.0,
     zoom: 3,
     fieldOfView: (30 * Math.PI) / 180, // in radians
     zNear: 0.1,
-    zFar: 1000,
-
+    zFar: 100,
     sides: function(){
         return 1 << CONFIG.zoom;
     }
 };
-
 
 main();
 
@@ -26,9 +25,7 @@ function hsv2rgb(h, s, v, a) {
     return [f(5), f(3), f(1), a];
 }   
 
-//
 // Start here
-//
 function main() {
     const canvas = document.querySelector("#glcanvas");
     const gl =canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
@@ -89,12 +86,15 @@ function main() {
 
     // Here's where we call the routine that builds all the
     // objects we'll be drawing.
-    const buffers = initBuffers(gl);
-
+    var buffers = initBuffers(gl);
+    addListeners();
     var then = 0;
-
     // Draw the scene repeatedly
     function render(now) {
+        if (CONFIG.updateBuffer) {
+            buffers = initBuffers(gl);
+            CONFIG.updateBuffer = false;
+        }
         now *= 0.001; // convert to seconds
         const deltaTime = now - then;
         then = now;
@@ -104,18 +104,16 @@ function main() {
     requestAnimationFrame(render);
 }
 
-//
-// initBuffers
-//
 // Initialize the buffers we'll need. For this demo, we just
 // have one object -- a simple three-dimensional cube.
 //
 function initBuffers(gl) {
     // Now set up the colors for the faces. We'll use solid colors
     // for each face.
-    faceColors = [];
-    for (var cind = 0; cind < colorsNum; cind++) {
-        faceColors.push(hsv2rgb((360 / colorsNum) * cind, 0.9, 0.9, 1));
+    const sides = CONFIG.sides();
+    var faceColors = [];
+    for (var cind = 0; cind < sides * 2; cind++) {
+        faceColors.push(hsv2rgb((360 / (sides * 2)) * cind, 0.9, 0.9, 1));
     }
 
     // Convert the array of colors into a table for all the vertices.
@@ -134,7 +132,7 @@ function initBuffers(gl) {
     // This array defines each face as two triangles, using the
     // indices into the vertex array to specify each triangle's position.
     var indices = []
-    const sides = CONFIG.sides();
+    
     const rotAngle = 2 *  Math.PI / sides; // in radians
     const rotAngleLat = (Math.PI - 2 * EarthDelta) / sides; // in radians
     
@@ -188,7 +186,6 @@ function initBuffers(gl) {
 
     // Build the element array buffer; this specifies the indices
     // into the vertex arrays for each face's vertices.
-
     const indexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
 
@@ -222,12 +219,7 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
 
     // Create a perspective matrix, a special matrix that is
     // used to simulate the distortion of perspective in a camera.
-    // Our field of view is 45 degrees, with a width/height
-    // ratio that matches the display size of the canvas
-    // and we only want to see objects between 0.1 units
-    // and 100 units away from the camera.
-
-
+    
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
     const projectionMatrix = mat4.create();
 
@@ -332,7 +324,7 @@ function drawScene(gl, programInfo, buffers, deltaTime) {
     {
         const type = gl.UNSIGNED_SHORT;
         const offset = 0;
-        gl.drawElements(gl.TRIANGLES, buffers.verticesCount, type, offset);
+        gl.drawElements(gl[CONFIG.drawMode], buffers.verticesCount, type, offset);
     }
     // Update the rotation for the next draw
     CONFIG.cubeRotation += deltaTime;
@@ -346,7 +338,6 @@ function initShaderProgram(gl, vsSource, fsSource) {
     const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
 
     // Create the shader program
-
     const shaderProgram = gl.createProgram();
     gl.attachShader(shaderProgram, vertexShader);
     gl.attachShader(shaderProgram, fragmentShader);
@@ -393,16 +384,29 @@ function loadShader(gl, type, source) {
     return shader;
 }
 
-function updateUIParameter(prefix, idInput, idLabel) {
-
+function registerSlider(idParam, uiPrefix, idInput, idLabel, updateBuffer) {
+    var slider = document.getElementById(idInput);
+    var sliderText = document.getElementById(idLabel);
+    slider.value = CONFIG[idParam];
+    sliderText.value = uiPrefix + CONFIG[idParam].toString();
+    slider.addEventListener('input', function () {
+        //slider.value = CONFIG[idParam].toString();
+        CONFIG[idParam] = parseFloat(slider.value);
+        if (updateBuffer) {
+            CONFIG.updateBuffer = true;
+        }
+        sliderText.value = uiPrefix + CONFIG[idParam].toString();
+        // return app.SetRotation(sliderX.getAttribute('data-axis'), parseFloat(sliderX.value)); 
+    });
 }
 
 function addListeners() {
-    var quality = document.getElementById('quality');
-    quality.addEventListener('change', function (e) { return app.SetQuality(quality.options[quality.selectedIndex].value); });
-    var sliderZoom = document.getElementById('sliderZoom');
-    sliderZoom.value = app.GetZoom().toString();
-    sliderZoom.addEventListener('input', function () { 
-        return app.SetRotation(sliderX.getAttribute('data-axis'), parseFloat(sliderX.value)); 
+    var drawMode = document.getElementById('drawMode');
+    drawMode.addEventListener('change', function (e) { 
+        CONFIG.drawMode = drawMode.options[drawMode.selectedIndex].value;
     });
+    registerSlider('zoom', 'Z:', 'sliderZoom', 'sliderZoomText', true);
+    registerSlider('zNear', 'zNear:', 'sliderZNear', 'sliderZNearText');
+    registerSlider('zFar', 'zFar:', 'sliderZFar', 'sliderZFarText');
+    
 }
