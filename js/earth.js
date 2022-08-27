@@ -1,6 +1,6 @@
 
 // Some constants
-const h = 1.01; // earth skew
+const EarthSkew = 6378137.0 / 6356752.0; // 1.003; // earth skew
 const EarthDelta = Math.PI / 180 * 5; // up to 85 (Mercatoor projection)
 const HiddenCanvasSize = 2048;
 
@@ -13,16 +13,12 @@ const CONFIG = {
     defaultURL: 'https://tile.openstreetmap.org',
     animationSpeed: 1,
     eyeDist: 0,
-    eyePosition : -12,
+    eyePosition : -10,
     drawMode: 'TRIANGLES',
     cubeRotation: 0.0,
-    
     fieldOfView: (30 * Math.PI) / 180, // in radians
     zNear: 0.1,
-    zFar: 100,
-    sides: function(){
-        return 1 << CONFIG.zoom;
-    }
+    zFar: 100
 };
 
 main();
@@ -32,6 +28,22 @@ function hsv2rgb(h, s, v, a) {
     let f = (n, k = (n + h / 60) % 6) => v - v * s * Math.max(Math.min(k, 4 - k, 1), 0);
     return [f(5), f(3), f(1), a];
 }   
+
+function getLatitudeFromTile(zoom, y) {
+    let sign = y < 0 ? -1 : 1;
+    return Math.atan(sign * Math.sinh(Math.PI * (1 - 2 * y / getPowZoom(zoom)))) * 180 / Math.PI;
+}
+function getLongitudeFromTile(zoom, x) {
+    return x / getPowZoom(zoom) * 360.0 - 180.0;
+}
+
+function getPowZoom(zoom) {
+    if (zoom >= 0 && zoom - Math.floor(zoom) < 0.001) {
+        return 1 << parseInt(zoom);
+    } else {
+        return Math.pow(2, zoom);
+    }
+}
 
 // Start here
 function main() {
@@ -69,7 +81,7 @@ function main() {
     uniform sampler2D uSampler;
 
     void main(void) {
-       //gl_FragColor = vColor; // random color 
+    //   gl_FragColor = vColor; // random color 
        gl_FragColor = texture2D(uSampler, vTextureCoord); // tiles
     }
   `;
@@ -137,7 +149,8 @@ function main() {
 function initBuffers(gl) {
     // Now set up the colors for the faces. We'll use solid colors
     // for each face.
-    const sides = CONFIG.sides();
+    const z = CONFIG.zoom;
+    const sides = 1 << CONFIG.zoom;
     const faceColors = [];
     for (var cind = 0; cind < sides * 2; cind++) {
         faceColors.push(hsv2rgb((360 / (sides * 2)) * cind, 0.9, 0.9, 1));
@@ -155,11 +168,16 @@ function initBuffers(gl) {
     const step = 1.0 / sides;
     for(var i = 0; i < sides; i++) {
         for (var j = 0; j < sides; j++) {
-            // geo latitude = 90 - lat
-            var latt = EarthDelta + j * rotAngleLat;
-            var latb = EarthDelta + (j + 1) * rotAngleLat;
-            var lonl = i * rotAngle;
-            var lonr = (i + 1) * rotAngle;
+            // GEO: geolatitude = 90 - lat, geolongitude = lon - 180
+            // const latt = EarthDelta + j * rotAngleLat;
+            // const latb = EarthDelta + (j + 1) * rotAngleLat;
+            // const lonl = i * rotAngle;
+            // const lonr = (i + 1) * rotAngle;
+            const latt = Math.PI / 2 - getLatitudeFromTile(z, j) / (180 / Math.PI);
+            const latb = Math.PI / 2 - getLatitudeFromTile(z, j + 1) / (180 / Math.PI);
+            const lonl = getLongitudeFromTile(z, i) / (180 / Math.PI) + Math.PI;
+            const lonr = getLongitudeFromTile(z, i + 1) / (180 / Math.PI) + Math.PI;
+            console.log(latt + ' ' + latb + ' ' + lonl + ' ' + lonr);
             positions = positions.concat([
                 Math.sin(lonl) * Math.sin(latt), Math.cos(latt), Math.cos(lonl) * Math.sin(latt),
                 Math.sin(lonl) * Math.sin(latb), Math.cos(latb), Math.cos(lonl) * Math.sin(latb),
@@ -186,9 +204,11 @@ function initBuffers(gl) {
         for (var i = 0; i < sides; i++) {
             var lonl = i * rotAngle;
             var lonr = (i + 1) * rotAngle;
-            positions = positions.concat([0, j * h, 0,
-                Math.sin(lonl) * Math.sin(EarthDelta), j * Math.cos(EarthDelta), Math.cos(lonl) * Math.sin(EarthDelta),
-                Math.sin(lonr) * Math.sin(EarthDelta), j * Math.cos(EarthDelta), Math.cos(lonr) * Math.sin(EarthDelta)
+            // let topAngle = EarthDelta;
+            let topAngle = Math.PI / 2 - getLatitudeFromTile(z, 0) / (180 / Math.PI);
+            positions = positions.concat([0, j * EarthSkew, 0,
+                Math.sin(lonl) * Math.sin(topAngle), j * Math.cos(topAngle), Math.cos(lonl) * Math.sin(topAngle),
+                Math.sin(lonr) * Math.sin(topAngle), j * Math.cos(topAngle), Math.cos(lonr) * Math.sin(topAngle)
             ]);
             indices = indices.concat([ind, ind + 1, ind + 2]);
             ind += 3;
