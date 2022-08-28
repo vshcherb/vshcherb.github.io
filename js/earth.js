@@ -4,6 +4,7 @@ const EarthRadiusEquator = 6378.137;
 const EarthRadiusPolar = 6356.752;
 const EarthSkew = EarthRadiusPolar / EarthRadiusPolar; // 0.997; // earth skew
 const HiddenCanvasSize = 4096;
+const m4 = twgl.m4;
 
 
 const CONFIG = {
@@ -13,9 +14,9 @@ const CONFIG = {
     eyePosition: 20000,
     eyeLat: 52.37313,
     eyeLon: 4.89875,
-    rotLatSpeed: 1,
+    rotLatSpeed: 0,
     rotLatDir: 1,
-    rotLonSpeed: 1,
+    rotLonSpeed: 0,
 
     textureZoom: 3,
     vertexZoom: 5,
@@ -385,6 +386,8 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     // Tell WebGL to use our program when drawing
     gl.useProgram(programInfo.program);
     // Set the shader uniforms
+    CONFIG.invMat = m4.inverse(projectionMatrix);
+
     gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, false, projectionMatrix);
     gl.uniformMatrix4fv(programInfo.uniformLocations.rotationMatrix, false, rotationMatrix);
     // Specify the textures
@@ -543,20 +546,51 @@ function addListeners() {
     registerSlider('rotLonSpeed', 'ROT LON:', 'sliderRotLonSpeed', 'sliderRotLonSpeedText');
     registerSlider('rotLatSpeed', 'ROT LAT:', 'sliderRotLatSpeed', 'sliderRotLatSpeedText');
 
-    let eyeZoom = registerSlider('eyePosition', 'CAM DIST km:', 'sliderEyePos', 'sliderEyePosText');
+    
+    let mouseCoords, mousedown = false;
+    const canvas = document.querySelector("#glcanvas");
+    function getClippedCoords(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const clipX = x / rect.width * 2 - 1;
+        const clipY = y / rect.height * -2 + 1;
+        return [clipX, clipY];
+    }
+    canvas.addEventListener('mousedown', (e) => {
+        mousedown = true;
+        mouseCoords = getClippedCoords(e);
+    });
+    canvas.addEventListener('mouseup', (e) => {
+        mousedown = false;
+    });
+    canvas.addEventListener('mousemove', (e) => {
+        if (mousedown) {
+            let newCoords = getClippedCoords(e);
+            CONFIG.eyeLat += (mouseCoords[1] - newCoords[1]) * CONFIG.eyePosition / 400;
+            CONFIG.eyeLon += (mouseCoords[0] - newCoords[0]) * CONFIG.eyePosition / 400; 
+            updateText();
+            mouseCoords = newCoords;
+
+            // if (CONFIG.invMat) {
+            //     const start = m4.transformPoint(CONFIG.invMat, [clipX, clipY, -1]);
+            //     const end = m4.transformPoint(CONFIG.invMat, [clipX, clipY, 1]);
+            //     console.log("Start - " + start + ", end - " + end + " " + clipX + ", " + clipY);
+            // }
+        }
+    });
+
+    const eyeZoom = document.getElementById("sliderEyePos");
+    const eyeZoomText = document.getElementById("sliderEyePosText");
+    function updateEyeZoomTxt() {
+        eyeZoomText.value = "CAM " + CONFIG.eyePosition.toFixed(0) + " km, " + eyeZoom.value + " z"; 
+    }
+    updateEyeZoomTxt();
     eyeZoom.addEventListener('input', function () {
-        if (CONFIG.eyePosition < 5000 && eyeZoom.step > 10) {
-            eyeZoom.min = 10;
-            eyeZoom.max = 10000;
-            eyeZoom.step = 10;
-            eyeZoom.value = 4000;
-        }
-        if (CONFIG.eyePosition >= 9000 && eyeZoom.step == 10) {
-            eyeZoom.min = 4000;
-            eyeZoom.max = 100000;
-            eyeZoom.step = 1000;
-            eyeZoom.value = 9000;
-        }
+        // 0 [100000] - 20 [10] 
+        let dist = 100000 / Math.exp(eyeZoom.value / 20 * Math.log(10000));
+        CONFIG.eyePosition = dist;
+        updateEyeZoomTxt();
     });
 
     registerSlider('zNear', 'zNear:', 'sliderZNear', 'sliderZNearText');
@@ -566,4 +600,5 @@ function addListeners() {
     registerSlider('textureZoom', 'Tiles Zoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture' );
     
     updateText();
+
 }
