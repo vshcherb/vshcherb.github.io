@@ -3,7 +3,8 @@
 const EarthRadiusEquator = 6378.137;
 const EarthRadiusPolar = 6356.752;
 const EarthSkew = EarthRadiusPolar / EarthRadiusEquator; // 0.997; // earth skew
-const HiddenCanvasSize = 4096;
+const TileSize = 256;
+const HiddenCanvasTiles = 7;
 
 
 const CONFIG = {
@@ -18,7 +19,8 @@ const CONFIG = {
     rotLatDir: 1,
     rotLonSpeed: 0,
 
-    textureZoom: 3,
+    textureTilesZoom: 3,
+    textureTilesBbox: [0, 0, HiddenCanvasTiles, HiddenCanvasTiles],
     vertexZoom: 5,
     // defaultURL: 'https://tile.osmand.net/hd',
     defaultURL: 'https://tile.openstreetmap.org',
@@ -132,15 +134,15 @@ function main() {
     // Draw the scene repeatedly
     var texture;
     function render(now) {
-        if (CONFIG.updateBuffer) {
+        if (CONFIG.loadTexture) {
+            texture = loadTilesTexture(gl);
+            CONFIG.loadTexture = false;
             buffers = initBuffers(gl);
             CONFIG.updateBuffer = false;
         }
-        if (CONFIG.loadTexture) {
-            texture = loadTexture(gl, CONFIG.defaultURL, CONFIG.textureZoom);
-            // See jameshfisher.com/2020/10/22/why-is-my-webgl-texture-upside-down
-            // gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-            CONFIG.loadTexture = false;
+        if (CONFIG.updateBuffer) {
+            buffers = initBuffers(gl);
+            CONFIG.updateBuffer = false;
         }
         const deltaTime = now - then;
         then = now;
@@ -155,10 +157,11 @@ function initBuffers(gl) {
     // Now set up the colors for the faces. We'll use solid colors
     // for each face.
     const z = CONFIG.vertexZoom;
-    const sides = 1 << CONFIG.vertexZoom;
+    const vertAllTiles = 1 << CONFIG.vertexZoom;
+    const texAllTiles = 1 << CONFIG.textureTilesZoom;
     const faceColors = [];
-    for (var cind = 0; cind < sides * 2; cind++) {
-        faceColors.push(hsv2rgb((360 / (sides * 2)) * cind, 0.9, 0.9, 1));
+    for (var cind = 0; cind < vertAllTiles * 2; cind++) {
+        faceColors.push(hsv2rgb((360 / (vertAllTiles * 2)) * cind, 0.9, 0.9, 1));
     }
     var ind = 0;
     var vertCount = 0;
@@ -167,11 +170,9 @@ function initBuffers(gl) {
     let positions = [];
     let indices = []
     let textureCoordinates = [];
-    
-    const rotAngle = 2 *  Math.PI / sides; // in radians
-    const step = 1.0 / sides;
-    for(var i = 0; i < sides; i++) {
-        for (var j = 0; j < sides; j++) {
+    const rotAngle = 2 *  Math.PI / vertAllTiles; // in radians
+    for(var i = 0; i < vertAllTiles; i++) {
+        for (var j = 0; j < vertAllTiles; j++) {
             // GEO: geolatitude = 90 - lat, geolongitude = lon - 180
             // const latt = EarthDelta + j * rotAngleLat;
             // const latb = EarthDelta + (j + 1) * rotAngleLat;
@@ -187,24 +188,40 @@ function initBuffers(gl) {
                 Math.sin(lonr) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonr) * Math.sin(latt),
                 Math.sin(lonr) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonr) * Math.sin(latb),
             ]);
+            const texStepX = 1 / (CONFIG.textureTilesBbox[2] + 1); 
+            const texStepY = 1 / (CONFIG.textureTilesBbox[3] + 1); 
+            const texOriginX = CONFIG.textureTilesBbox[0] / texAllTiles * vertAllTiles;
+            const texOriginY = CONFIG.textureTilesBbox[1] / texAllTiles * vertAllTiles;
+            const texTilesWidth = (CONFIG.textureTilesBbox[2] + 1) / texAllTiles * vertAllTiles;
+            const texTilesHeight = (CONFIG.textureTilesBbox[3] + 1) / texAllTiles * vertAllTiles;
+            var leftTex = (i - texOriginX) / texTilesWidth + texStepX;
+            var rightTex = (i + 1 - texOriginX) / texTilesWidth + texStepX;
+            if (leftTex < 0 || rightTex > 1) {
+                // console.log("Important " + leftTex + " " + rightTex);
+                leftTex = 0; rightTex = texStepX * texAllTiles / vertAllTiles;
+            }
+            var topTex = (j - texOriginY) / texTilesHeight + texStepY;
+            var bottomTex = (j - texOriginY + 1) / texTilesHeight + texStepY;
+            if (topTex < 0 || bottomTex > 1) {
+                // console.log("Important " + topTex + " " + bottomTex);
+                topTex = 0; bottomTex = texStepY * texAllTiles / vertAllTiles;
+            }
             textureCoordinates = textureCoordinates.concat([
                 // 0, 0, step * i, 0, step * i, step * j, 0, step * j,
-                step * i, step * j, step * i, step * (j + 1), 
-                step * (i + 1), step * j, step * (i + 1), step * (j + 1), 
-                
-                
+                leftTex, topTex, leftTex, bottomTex, 
+                rightTex, topTex, rightTex, bottomTex
             ]);
             indices = indices.concat([ind, ind + 1, ind + 2, ind + 2, ind + 1, ind + 3]);
             ind += 4;
             vertCount += 6;
-            const c = faceColors[((i * sides + j) * 7) % faceColors.length];
+            const c = faceColors[((i * vertAllTiles + j) * 7) % faceColors.length];
             // Repeat each color four times for the four vertices of the face
             colors = colors.concat(c, c, c, c);
         }
     }
     // TOP and bottom TODO
     for (var j = -1; j <= 1; j += 2) {
-        for (var i = 0; i < sides; i++) {
+        for (var i = 0; i < vertAllTiles; i++) {
             var lonl = i * rotAngle;
             var lonr = (i + 1) * rotAngle;
             // let topAngle = EarthDelta;
@@ -460,51 +477,76 @@ function loadShader(gl, type, source) {
     return shader;
 }
 
-function loadTexture(gl, url, zoom) {
+let textureUploadPending = false;
+function uploadTexture(gl, texture, hdcanvas) {
+    textureUploadPending = true;
+    setTimeout(() => {
+        if (!textureUploadPending) {
+            return false;
+        }
+        textureUploadPending = false;
+        const level = 0;
+        const internalFormat = gl.RGBA;
+        const srcFormat = gl.RGBA;
+        const srcType = gl.UNSIGNED_BYTE;
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, hdcanvas);
+        // WebGL1 has different requirements for power of 2 images
+        // vs non power of 2 images so check if the image is a  power of 2 in both dimensions.
+        gl.generateMipmap(gl.TEXTURE_2D);
+        // No, it's not a power of 2. Turn off mips and set wrapping to clamp to edge
+        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }, 50);
+}
+
+function loadTilesTexture(gl) {
     const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
     const hdcanvas = document.querySelector("#hiddencanvas");
-    const ctx2D = hdcanvas.getContext("2d");
-    
-    // Because images have to be download over the internet
-    // they might take a moment until they are ready.
-    // Until then put a single pixel in the texture so we can
-    // use it immediately. When the image has finished downloading
-    // we'll update the texture with the contents of the image.
-    const level = 0;
-    const internalFormat = gl.RGBA;
-    const width = 1;
-    const height = 1;
-    const border = 0;
-    const srcFormat = gl.RGBA;
-    const srcType = gl.UNSIGNED_BYTE;
-    const pixel = new Uint8Array([0, 0, 255, 255]); // opaque blue
-    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, srcFormat, srcType,pixel);
-    let loadedImages = 0;
-    const side = 1 << zoom;
-    const scale = HiddenCanvasSize / (side);
-    for(var x = 0; x < side; x++) {
-        for (var y = 0; y < side; y++) {
-            const xT = x;
-            const yT = y;
+    hdcanvas.width = (HiddenCanvasTiles + 1) * TileSize;
+    // reserve 1st row for empty tiles
+    hdcanvas.height = (HiddenCanvasTiles + 1) * TileSize;
+    const ctx = hdcanvas.getContext("2d");
+    ctx.beginPath();
+    ctx.fillStyle = "#eee";
+    ctx.fillRect(0, 0, hdcanvas.width, hdcanvas.height);
+    ctx.strokeStyle = "#333";
+    for (var x = 0; x < hdcanvas.width; x += TileSize / 16) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, hdcanvas.height);
+        ctx.stroke();
+    }
+    for (var y = 0; y < hdcanvas.height; y += TileSize / 16) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(hdcanvas.width, y);
+        ctx.stroke();
+    }
+
+    uploadTexture(gl, texture, hdcanvas);
+    const zoom = CONFIG.textureTilesZoom;
+    const maxTileId = 1 << CONFIG.textureTilesZoom;
+    for (var x = 0; x < HiddenCanvasTiles; x++) {
+        if (!(x + CONFIG.textureTilesBbox[0] < maxTileId)) {
+            continue;
+        }
+        for (var y = 0; y < HiddenCanvasTiles; y++) {
+            if (!(y + CONFIG.textureTilesBbox[1] < maxTileId)) {
+                continue;
+            }   
+            const xT = (x + 1);
+            const yT = (y + 1);
             const image = new Image();
             image.onload = function () {
-                ctx2D.drawImage(image, xT * scale, yT * scale, scale, scale);
-                loadedImages = loadedImages + 1;
-                if (loadedImages == side * side) {
-                    gl.bindTexture(gl.TEXTURE_2D, texture);
-                    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, hdcanvas);
-                    // WebGL1 has different requirements for power of 2 images
-                    // vs non power of 2 images so check if the image is a  power of 2 in both dimensions.
-                    gl.generateMipmap(gl.TEXTURE_2D);
-                    // No, it's not a power of 2. Turn off mips and set wrapping to clamp to edge
-                    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-                    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-                }
+                ctx.drawImage(image, xT * TileSize, yT * TileSize, TileSize, TileSize);            
+                uploadTexture(gl, texture, hdcanvas);
             };
             image.crossOrigin = "anonymous";
-            image.src = url + "/" + zoom + "/" + x + "/" + y + ".png";
+            image.src = CONFIG.defaultURL + "/" + zoom + "/" + 
+                    (x + CONFIG.textureTilesBbox[0]) + "/" + 
+                    (y + CONFIG.textureTilesBbox[1]) + ".png";
         }
     }   
     return texture;
@@ -532,9 +574,7 @@ function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
         if (flagParam) {
             CONFIG[flagParam] = true;
         }
-        sliderText.value = uiPrefix + CONFIG[idParam].toString();
-        // action can cause reevaluate
-        // updateText();        
+        sliderText.value = uiPrefix + CONFIG[idParam].toString();     
     });
     return slider;
 }
@@ -576,12 +616,22 @@ function addListeners() {
         }
     });
 
+    
+    const eyeAngle = document.getElementById("sliderEyeAngle");
+    const eyeAngleText = document.getElementById("sliderEyeAngleText");
+    function updateEyeAngleTxt() {
+        const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.eyePosition / EarthRadiusEquator)) * 180 / Math.PI;
+        eyeAngleText.value = "ANGLE: " + eyeAngle.value + ", " + (eyeAngle.value * lookAtAngleMax).toFixed(0) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
+    }
+
     const eyeZoom = document.getElementById("sliderEyePos");
     const eyeZoomText = document.getElementById("sliderEyePosText");
-    eyeZoom.value = - (Math.log(CONFIG.eyePosition / 3800) / Math.log(2)) + 5;
+    eyeZoom.value = -(Math.log(CONFIG.eyePosition / 3800) / Math.log(2)) + 5;
     function updateEyeZoomTxt() {
         eyeZoomText.value = "CAM " + CONFIG.eyePosition.toFixed(0) + " km, " + eyeZoom.value + " z"; 
+        updateEyeAngleTxt();
     }
+
     function recalculateZoomValue() {
         // Observation: 9 - [ 230 km], 8 - [ 460 km], 7 - [ 910 km], 6 - [1850 km], 5 - [3900 km]
         CONFIG.eyePosition = Math.pow(2, 5 - eyeZoom.value) * 3800;
@@ -599,14 +649,6 @@ function addListeners() {
         
         recalculateZoomValue();
     });
-
-    const eyeAngle = document.getElementById("sliderEyeAngle");
-    const eyeAngleText = document.getElementById("sliderEyeAngleText");
-    function updateEyeAngleTxt() {
-        const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.eyePosition / EarthRadiusEquator)) * 180 / Math.PI;
-        
-        eyeAngleText.value = "ANGLE: " + eyeAngle.value + ", " + (eyeAngle.value * lookAtAngleMax).toFixed(0) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
-    }
     updateEyeAngleTxt();
     eyeAngle.addEventListener('input', function () {
         CONFIG.eyeAngle = eyeAngle.value;
@@ -619,7 +661,7 @@ function addListeners() {
     registerSlider('zFar', 'zFar:', 'sliderZFar', 'sliderZFarText');
 
     registerSlider('vertexZoom', 'Vertex Zoom:', 'sliderZoom', 'sliderZoomText', 'updateBuffer');
-    registerSlider('textureZoom', 'Tiles Zoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture' );
+    registerSlider('textureTilesZoom', 'Tiles Zoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture' );
     
     updateText();
 

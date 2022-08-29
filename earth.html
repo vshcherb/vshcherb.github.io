@@ -15,8 +15,8 @@
 
 <body>
     <div class="container">
-        <canvas id="glcanvas" width="640" height="640"></canvas>
-        <canvas hidden id="hiddencanvas" width="4096" height="4096"></canvas>
+        <canvas id="glcanvas" width="512" height="512"></canvas>
+        <canvas hidden id="hiddencanvas" width="0" height="0"></canvas>
         <div class="controls">
             <h3>Rendering</h3>
             <select id="drawMode">
@@ -38,7 +38,7 @@
             </div>
             <div class="sliderGroup">
                 <input type="text" id="sliderEyeAngleText" disabled />
-                <input type="range" id="sliderEyeAngle" min="0" max="1" step="0.05" />
+                <input type="range" id="sliderEyeAngle" min="0" max="1" step="0.05" value="0" />
             </div>
 
             <div class="sliderGroup">
