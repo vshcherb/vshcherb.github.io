@@ -5,7 +5,12 @@ const EarthRadiusPolar = 6356.752;
 const EarthSkew = EarthRadiusPolar / EarthRadiusEquator; // 0.997; // earth skew
 const TileSize = 256;
 const HiddenCanvasTiles = 7;
-
+const MIN_LATITUDE = -85.0511;
+const MAX_LATITUDE = 85.0511;
+const LATITUDE_TURN = 180.0;
+const MIN_LONGITUDE = -180.0;
+const MAX_LONGITUDE = 180.0;
+const LONGITUDE_TURN = 360.0;
 
 const CONFIG = {
     loadTexture: true,
@@ -39,6 +44,56 @@ function hsv2rgb(h, s, v, a) {
     let f = (n, k = (n + h / 60) % 6) => v - v * s * Math.max(Math.min(k, 4 - k, 1), 0);
     return [f(5), f(3), f(1), a];
 }   
+
+
+function checkLongitude(longitude) {
+    if (longitude >= MIN_LONGITUDE && longitude <= MAX_LONGITUDE) {
+        return longitude;
+    }
+    while (longitude <= MIN_LONGITUDE || longitude > MAX_LONGITUDE) {
+        if (longitude < 0) {
+            longitude += LONGITUDE_TURN;
+        } else {
+            longitude -= LONGITUDE_TURN;
+        }
+    }
+    return longitude;
+}
+
+function checkLatitude(latitude) {
+    if (latitude >= MIN_LATITUDE && latitude <= MAX_LATITUDE) {
+        return latitude;
+    }
+    while (latitude < -90 || latitude > 90) {
+        if (latitude < 0) {
+            latitude += LATITUDE_TURN;
+        } else {
+            latitude -= LATITUDE_TURN;
+        }
+    }
+    if (latitude < MIN_LATITUDE) {
+        return MIN_LATITUDE;
+    } else if (latitude > MAX_LATITUDE) {
+        return MAX_LATITUDE;
+    }
+    return latitude;
+}
+
+function getTileNumberY(zoom, latitude) {
+    latitude = checkLatitude(latitude) / 180.0 * Math.PI;
+	let eval = Math.log(Math.tan(latitude) + 1 / Math.cos(latitude));
+    return (1 - eval / Math.PI) / 2 * getPowZoom(zoom);
+}
+
+function getTileNumberX(zoom, longitude) {
+    longitude = checkLongitude(longitude);
+	const powZoom = getPowZoom(zoom);
+    let dz = (longitude + 180.0) /360.0 * powZoom;
+    if (dz >= powZoom) {
+        return powZoom - 0.01;
+    }
+    return dz;
+}
 
 function getLatitudeFromTile(zoom, y) {
     let sign = y < 0 ? -1 : 1;
@@ -528,12 +583,17 @@ function loadTilesTexture(gl) {
     uploadTexture(gl, texture, hdcanvas);
     const zoom = CONFIG.textureTilesZoom;
     const maxTileId = 1 << CONFIG.textureTilesZoom;
+    
+    const startX = Math.max(0, Math.floor(getTileNumberX(zoom, CONFIG.eyeLon) - HiddenCanvasTiles / 2));
+    const startY = Math.max(0, Math.floor(getTileNumberY(zoom, CONFIG.eyeLat) - HiddenCanvasTiles / 2));
+    CONFIG.textureTilesBbox[0] = startX;
+    CONFIG.textureTilesBbox[1] = startY;
     for (var x = 0; x < HiddenCanvasTiles; x++) {
-        if (!(x + CONFIG.textureTilesBbox[0] < maxTileId)) {
+        if (!(x + startX < maxTileId) ) {
             continue;
         }
         for (var y = 0; y < HiddenCanvasTiles; y++) {
-            if (!(y + CONFIG.textureTilesBbox[1] < maxTileId)) {
+            if (!(y + startY < maxTileId)) {
                 continue;
             }   
             const xT = (x + 1);
@@ -545,8 +605,7 @@ function loadTilesTexture(gl) {
             };
             image.crossOrigin = "anonymous";
             image.src = CONFIG.defaultURL + "/" + zoom + "/" + 
-                    (x + CONFIG.textureTilesBbox[0]) + "/" + 
-                    (y + CONFIG.textureTilesBbox[1]) + ".png";
+                (x + startX) + "/" +  (y + startY) + ".png";
         }
     }   
     return texture;
