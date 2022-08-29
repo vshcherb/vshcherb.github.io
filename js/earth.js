@@ -558,6 +558,7 @@ function addListeners() {
         const clipY = y / rect.height * -2 + 1;
         return [clipX, clipY];
     }
+    
     canvas.addEventListener('mousedown', (e) => {
         mousedown = true;
         mouseCoords = getClippedCoords(e);
@@ -581,19 +582,30 @@ function addListeners() {
     function updateEyeZoomTxt() {
         eyeZoomText.value = "CAM " + CONFIG.eyePosition.toFixed(0) + " km, " + eyeZoom.value + " z"; 
     }
-    updateEyeZoomTxt();
-    eyeZoom.addEventListener('input', function () {
+    function recalculateZoomValue() {
         // Observation: 9 - [ 230 km], 8 - [ 460 km], 7 - [ 910 km], 6 - [1850 km], 5 - [3900 km]
-        CONFIG.eyePosition =  Math.pow(2, 5 - eyeZoom.value) * 3800;
+        CONFIG.eyePosition = Math.pow(2, 5 - eyeZoom.value) * 3800;
         // CONFIG.eyePosition = 100000 / Math.exp((eyeZoom.value + 2)/ 20 * Math.log(10000));
         updateEyeZoomTxt();
+    }
+    updateEyeZoomTxt();
+
+    eyeZoom.addEventListener('input', function () {
+        recalculateZoomValue();
+    });
+    canvas.addEventListener('wheel', (e) => {
+        const delta = -(0.05 * Math.floor(e.deltaY / 4));
+        eyeZoom.value = parseFloat(eyeZoom.value) + delta;
+        
+        recalculateZoomValue();
     });
 
     const eyeAngle = document.getElementById("sliderEyeAngle");
     const eyeAngleText = document.getElementById("sliderEyeAngleText");
     function updateEyeAngleTxt() {
-        const vl = Math.asin(1 / (1 + CONFIG.eyePosition / EarthRadiusEquator)) * 180 / Math.PI;
-        eyeAngleText.value = "CAM ANGLE: " + eyeAngle.value + ", " + vl.toFixed(1) + "° ";
+        const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.eyePosition / EarthRadiusEquator)) * 180 / Math.PI;
+        
+        eyeAngleText.value = "ANGLE: " + eyeAngle.value + ", " + (eyeAngle.value * lookAtAngleMax).toFixed(0) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
     }
     updateEyeAngleTxt();
     eyeAngle.addEventListener('input', function () {
