@@ -2,9 +2,8 @@
 // Some constants
 const EarthRadiusEquator = 6378.137;
 const EarthRadiusPolar = 6356.752;
-const EarthSkew = EarthRadiusPolar / EarthRadiusPolar; // 0.997; // earth skew
+const EarthSkew = EarthRadiusPolar / EarthRadiusEquator; // 0.997; // earth skew
 const HiddenCanvasSize = 4096;
-const m4 = twgl.m4;
 
 
 const CONFIG = {
@@ -12,6 +11,7 @@ const CONFIG = {
     updateBuffer: false,
 
     eyePosition: 20000,
+    eyeAngle: 0,
     eyeLat: 52.37313,
     eyeLon: 4.89875,
     rotLatSpeed: 0,
@@ -20,7 +20,7 @@ const CONFIG = {
 
     textureZoom: 3,
     vertexZoom: 5,
-    // defaultURL: 'https://tile.osmand.net',
+    // defaultURL: 'https://tile.osmand.net/hd',
     defaultURL: 'https://tile.openstreetmap.org',
     
     drawMode: 'TRIANGLES',
@@ -280,7 +280,9 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     // as the destination to receive the result.
    // mat4.perspective(projectionMatrix, fieldOfView, aspect, zNear, zFar);
     const eye = vec3.fromValues(0, 0, - 1 - (CONFIG.eyePosition / EarthRadiusEquator));
-    const lookAt = vec3.fromValues(0, 0, 0);
+    
+    const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.eyePosition / EarthRadiusEquator));
+    const lookAt = vec3.fromValues(0, Math.tan(CONFIG.eyeAngle * lookAtAngleMax) * (EarthSkew + CONFIG.eyePosition / EarthRadiusPolar) , 0);
     const lookAtMatrix = mat4.create();
     const perspectiveMatrix = mat4.create();
     
@@ -386,8 +388,7 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     // Tell WebGL to use our program when drawing
     gl.useProgram(programInfo.program);
     // Set the shader uniforms
-    CONFIG.invMat = m4.inverse(projectionMatrix);
-
+    
     gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, false, projectionMatrix);
     gl.uniformMatrix4fv(programInfo.uniformLocations.rotationMatrix, false, rotationMatrix);
     // Specify the textures
@@ -571,28 +572,37 @@ function addListeners() {
             CONFIG.eyeLon += (mouseCoords[0] - newCoords[0]) * CONFIG.eyePosition / 400; 
             updateText();
             mouseCoords = newCoords;
-
-            // if (CONFIG.invMat) {
-            //     const start = m4.transformPoint(CONFIG.invMat, [clipX, clipY, -1]);
-            //     const end = m4.transformPoint(CONFIG.invMat, [clipX, clipY, 1]);
-            //     console.log("Start - " + start + ", end - " + end + " " + clipX + ", " + clipY);
-            // }
         }
     });
 
     const eyeZoom = document.getElementById("sliderEyePos");
     const eyeZoomText = document.getElementById("sliderEyePosText");
+    eyeZoom.value = - (Math.log(CONFIG.eyePosition / 3800) / Math.log(2)) + 5;
     function updateEyeZoomTxt() {
         eyeZoomText.value = "CAM " + CONFIG.eyePosition.toFixed(0) + " km, " + eyeZoom.value + " z"; 
     }
     updateEyeZoomTxt();
     eyeZoom.addEventListener('input', function () {
-        // 0 [100000] - 20 [10] 
-        let dist = 100000 / Math.exp(eyeZoom.value / 20 * Math.log(10000));
-        CONFIG.eyePosition = dist;
+        // Observation: 9 - [ 230 km], 8 - [ 460 km], 7 - [ 910 km], 6 - [1850 km], 5 - [3900 km]
+        CONFIG.eyePosition =  Math.pow(2, 5 - eyeZoom.value) * 3800;
+        // CONFIG.eyePosition = 100000 / Math.exp((eyeZoom.value + 2)/ 20 * Math.log(10000));
         updateEyeZoomTxt();
     });
 
+    const eyeAngle = document.getElementById("sliderEyeAngle");
+    const eyeAngleText = document.getElementById("sliderEyeAngleText");
+    function updateEyeAngleTxt() {
+        const vl = Math.asin(1 / (1 + CONFIG.eyePosition / EarthRadiusEquator)) * 180 / Math.PI;
+        eyeAngleText.value = "CAM ANGLE: " + eyeAngle.value + ", " + vl.toFixed(1) + "° ";
+    }
+    updateEyeAngleTxt();
+    eyeAngle.addEventListener('input', function () {
+        CONFIG.eyeAngle = eyeAngle.value;
+        updateEyeAngleTxt();
+    });
+
+    
+    
     registerSlider('zNear', 'zNear:', 'sliderZNear', 'sliderZNearText');
     registerSlider('zFar', 'zFar:', 'sliderZFar', 'sliderZFarText');
 
