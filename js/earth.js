@@ -207,6 +207,7 @@ function main() {
     requestAnimationFrame(render);
 }
 
+
 // Initialize the buffers we'll need.
 function initBuffers(gl) {
     // Now set up the colors for the faces. We'll use solid colors
@@ -220,77 +221,99 @@ function initBuffers(gl) {
     }
     var ind = 0;
     var vertCount = 0;
+    
+    const rotAngle = 2 *  Math.PI / vertAllTiles; // in radians
+    const cxTile = Math.floor(getTileNumberX(z, CONFIG.eyeLon));
+    const cyTile = Math.floor(getTileNumberY(z, CONFIG.eyeLat));
+    const cRad = Math.max(1 << (z - 2), 2);
+    const noncStep = Math.max(1 << (z - 4), 1);
+    let xWidth = 1;
+    let yWidth = 1;
+    
+    const texStepX = 1 / (CONFIG.textureTilesBbox[2] + 1);
+    const texStepY = 1 / (CONFIG.textureTilesBbox[3] + 1);
+    const texOriginX = 1.0 * CONFIG.textureTilesBbox[0] / texAllTiles * vertAllTiles;
+    const texOriginY = 1.0 * CONFIG.textureTilesBbox[1] / texAllTiles * vertAllTiles;
+    const texTilesWidth = 1.0 * (CONFIG.textureTilesBbox[2] + 1) / texAllTiles * vertAllTiles;
+    const texTilesHeight = 1.0 * (CONFIG.textureTilesBbox[3] + 1) / texAllTiles * vertAllTiles;
+    let loopLength = 0;
+    for (var xTile = 0; xTile < vertAllTiles; xTile += xWidth) {
+        xWidth = Math.abs(xTile - cxTile) < cRad ? 1 : noncStep;
+        loopLength ++;
+    }
     // Now create an array of positions for the cube.
     let colors = [];
     let positions = [];
     let indices = []
     let textureCoordinates = [];
-    const rotAngle = 2 *  Math.PI / vertAllTiles; // in radians
-    for(var i = 0; i < vertAllTiles; i++) {
-        for (var j = 0; j < vertAllTiles; j++) {
+    let arrInd = 0;
+    for (var xTile = 0; xTile < vertAllTiles; xTile += xWidth) {
+        xWidth = Math.abs(xTile - cxTile) < cRad ? 1 : noncStep;
+        for (var yTile = 0; yTile < vertAllTiles; yTile += yWidth) {
+            yWidth = Math.abs(yTile - cyTile) < cRad ? 1 : noncStep;
             // GEO: geolatitude = 90 - lat, geolongitude = lon - 180
             // const latt = EarthDelta + j * rotAngleLat;
             // const latb = EarthDelta + (j + 1) * rotAngleLat;
             // const lonl = i * rotAngle;
             // const lonr = (i + 1) * rotAngle;
-            const latt = Math.PI / 2 - getLatitudeFromTile(z, j) / (180 / Math.PI);
-            const latb = Math.PI / 2 - getLatitudeFromTile(z, j + 1) / (180 / Math.PI);
-            const lonl = getLongitudeFromTile(z, i) / (180 / Math.PI) + Math.PI;
-            const lonr = getLongitudeFromTile(z, i + 1) / (180 / Math.PI) + Math.PI;
-            positions = positions.concat([
+            const latt = Math.PI / 2 - getLatitudeFromTile(z, yTile) / (180 / Math.PI);
+            const latb = Math.PI / 2 - getLatitudeFromTile(z, yTile + yWidth) / (180 / Math.PI);
+            const lonl = getLongitudeFromTile(z, xTile) / (180 / Math.PI) + Math.PI;
+            const lonr = getLongitudeFromTile(z, xTile + xWidth) / (180 / Math.PI) + Math.PI;
+            positions.push(
                 Math.sin(lonl) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonl) * Math.sin(latt),
                 Math.sin(lonl) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonl) * Math.sin(latb),
                 Math.sin(lonr) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonr) * Math.sin(latt),
                 Math.sin(lonr) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonr) * Math.sin(latb),
-            ]);
-            const texStepX = 1 / (CONFIG.textureTilesBbox[2] + 1); 
-            const texStepY = 1 / (CONFIG.textureTilesBbox[3] + 1); 
-            const texOriginX = CONFIG.textureTilesBbox[0] / texAllTiles * vertAllTiles;
-            const texOriginY = CONFIG.textureTilesBbox[1] / texAllTiles * vertAllTiles;
-            const texTilesWidth = (CONFIG.textureTilesBbox[2] + 1) / texAllTiles * vertAllTiles;
-            const texTilesHeight = (CONFIG.textureTilesBbox[3] + 1) / texAllTiles * vertAllTiles;
-            var leftTex = (i - texOriginX) / texTilesWidth + texStepX;
-            var rightTex = (i + 1 - texOriginX) / texTilesWidth + texStepX;
+            );
+            
+            var leftTex = (xTile - texOriginX) / texTilesWidth + texStepX;
+            var rightTex = (xTile + xWidth - texOriginX) / texTilesWidth + texStepX;
             if (leftTex < 0 || rightTex > 1) {
-                // console.log("Important " + leftTex + " " + rightTex);
-                leftTex = 0; rightTex = texStepX * texAllTiles / vertAllTiles;
+                leftTex = 0; rightTex = Math.min(texStepX, texStepX * texAllTiles / vertAllTiles);
             }
-            var topTex = (j - texOriginY) / texTilesHeight + texStepY;
-            var bottomTex = (j - texOriginY + 1) / texTilesHeight + texStepY;
+            var topTex = (yTile - texOriginY) / texTilesHeight + texStepY;
+            var bottomTex = (yTile + yWidth - texOriginY ) / texTilesHeight + texStepY;
             if (topTex < 0 || bottomTex > 1) {
-                // console.log("Important " + topTex + " " + bottomTex);
-                topTex = 0; bottomTex = texStepY * texAllTiles / vertAllTiles;
+                topTex = 0; bottomTex = Math.min(texStepY * texAllTiles / vertAllTiles, texStepY);
             }
-            textureCoordinates = textureCoordinates.concat([
+            textureCoordinates.push( 
                 // 0, 0, step * i, 0, step * i, step * j, 0, step * j,
                 leftTex, topTex, leftTex, bottomTex, 
                 rightTex, topTex, rightTex, bottomTex
-            ]);
-            indices = indices.concat([ind, ind + 1, ind + 2, ind + 2, ind + 1, ind + 3]);
+            );
+            indices.push(ind, ind + 1, ind + 2, ind + 2, ind + 1, ind + 3);
             ind += 4;
             vertCount += 6;
-            const c = faceColors[((i * vertAllTiles + j) * 7) % faceColors.length];
+            const c = faceColors[((xTile * vertAllTiles + yTile) * 7) % faceColors.length];
             // Repeat each color four times for the four vertices of the face
-            colors = colors.concat(c, c, c, c);
+            colors.push(c[0], c[1], c[2], c[3]);
+            colors.push(c[0], c[1], c[2], c[3]);
+            colors.push(c[0], c[1], c[2], c[3]);
+            colors.push(c[0], c[1], c[2], c[3]);
+            arrInd++;
         }
     }
-    // TOP and bottom TODO
-    for (var j = -1; j <= 1; j += 2) {
-        for (var i = 0; i < vertAllTiles; i++) {
-            var lonl = i * rotAngle;
-            var lonr = (i + 1) * rotAngle;
+    for (var yTile = -1; yTile <= 1; yTile += 2) {
+        for (var xTile = 0; xTile < vertAllTiles; xTile += xWidth) {
+            xWidth = Math.abs(xTile - cxTile) < cRad ? 1 : noncStep;
+            var lonl = xTile * rotAngle;
+            var lonr = (xTile + xWidth) * rotAngle;
             // let topAngle = EarthDelta;
             let topAngle = Math.PI / 2 - getLatitudeFromTile(z, 0) / (180 / Math.PI);
-            positions = positions.concat([0, j * EarthSkew, 0,
-                Math.sin(lonl) * Math.sin(topAngle), EarthSkew * j * Math.cos(topAngle), Math.cos(lonl) * Math.sin(topAngle),
-                Math.sin(lonr) * Math.sin(topAngle), EarthSkew * j * Math.cos(topAngle), Math.cos(lonr) * Math.sin(topAngle)
-            ]);
-            indices = indices.concat([ind, ind + 1, ind + 2]);
+            positions.push(
+                0, yTile * EarthSkew, 0,
+                Math.sin(lonl) * Math.sin(topAngle), EarthSkew * yTile * Math.cos(topAngle), Math.cos(lonl) * Math.sin(topAngle),
+                Math.sin(lonr) * Math.sin(topAngle), EarthSkew * yTile * Math.cos(topAngle), Math.cos(lonr) * Math.sin(topAngle)
+            );
+            indices.push(ind, ind + 1, ind + 2);
             ind += 3;
             // Repeat each color 3 times for the four vertices of the face
             const c = [0.9, 0.9, 0.9, 0.9];
-            colors = colors.concat(c, c, c);
-            textureCoordinates = textureCoordinates.concat([0, 0, 0, 0, 0, 0, 0, 0]);
+            colors.push(c[0], c[1], c[2], c[3]);
+            colors.push(c[0], c[1], c[2], c[3]);
+            colors.push(c[0], c[1], c[2], c[3]);
+            textureCoordinates.push(0, 0, 0, 0, 0, 0, 0, 0);
             vertCount += 3;
         }
     }
@@ -319,7 +342,6 @@ function initBuffers(gl) {
     // Now send the element array to GL
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
     
-
     return {
         verticesCount: vertCount,
         textureCoord: textureCoordBuffer,
