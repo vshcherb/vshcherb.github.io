@@ -16,6 +16,8 @@ const CONFIG = {
     loadTexture: true,
     updateBuffer: false,
 
+    tilesOnAndGridOff: true,
+
     eyePosition: 20000,
     eyeAngle: 0,
     eyeLat: 52.37313,
@@ -33,7 +35,7 @@ const CONFIG = {
     drawMode: 'TRIANGLES',
     
     fieldOfView: (30 * Math.PI) / 180, // in radians
-    zNear: 0.000001,
+    zNear: 0.001,
     zFar: 100
 };
 
@@ -144,10 +146,12 @@ function main() {
     varying lowp vec4 vColor;
     varying highp vec2 vTextureCoord;
     uniform sampler2D uSampler;
+    uniform lowp int uColor;
+    uniform lowp int uTexture;
 
     void main(void) {
-    //   gl_FragColor = vColor; // random color 
-       gl_FragColor = texture2D(uSampler, vTextureCoord); // tiles
+        gl_FragColor = vec4(uColor) * vColor 
+                    + vec4(uTexture) * texture2D(uSampler, vTextureCoord); // tiles
     }
   `;
 
@@ -170,6 +174,8 @@ function main() {
             projectionMatrix: gl.getUniformLocation(shaderProgram, "uProjectionMatrix"),
             rotationMatrix: gl.getUniformLocation(shaderProgram, "uRotationMatrix"),
             uSampler: gl.getUniformLocation(shaderProgram, "uSampler"),
+            uColor: gl.getUniformLocation(shaderProgram, "uColor"),
+            uTexture: gl.getUniformLocation(shaderProgram, "uTexture"),
         },
     };
     addListeners();
@@ -288,7 +294,7 @@ function initBuffers(gl) {
             indices.push(ind, ind + 1, ind + 2, ind + 2, ind + 1, ind + 3);
             ind += 4;
             vertCount += 6;
-            const c = faceColors[((xTile * vertAllTiles + yTile) * 7) % faceColors.length];
+            const c = faceColors[((xTile * vertAllTiles + yTile) * (faceColors.length / 2 - 1)) % faceColors.length];
             // Repeat each color four times for the four vertices of the face
             colors.push(c[0], c[1], c[2], c[3]);
             colors.push(c[0], c[1], c[2], c[3]);
@@ -496,6 +502,10 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     // Tell the shader we bound the texture to texture unit 0
     gl.uniform1i(programInfo.uniformLocations.uSampler, 0);
 
+    
+    gl.uniform1i(programInfo.uniformLocations.uColor, CONFIG.tilesOnAndGridOff ? 0 : 1);
+    gl.uniform1i(programInfo.uniformLocations.uTexture, CONFIG.tilesOnAndGridOff ? 1 : 0);
+
     {
         const type = gl.UNSIGNED_SHORT;
         const offset = 0;
@@ -666,7 +676,14 @@ function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
 function addListeners() {
     var drawMode = document.getElementById('drawMode');
     drawMode.addEventListener('change', function (e) { 
-        CONFIG.drawMode = drawMode.options[drawMode.selectedIndex].value;
+        if(drawMode.options[drawMode.selectedIndex].value == 'TILES_GRID') {
+            CONFIG.drawMode = 'TRIANGLES';
+            CONFIG.tilesOnAndGridOff = false;
+        } else {
+            CONFIG.drawMode = drawMode.options[drawMode.selectedIndex].value;
+            CONFIG.tilesOnAndGridOff = true;
+        }
+        CONFIG.updateBuffer = true;
     });
     registerSlider('rotLonSpeed', 'ROT LON:', 'sliderRotLonSpeed', 'sliderRotLonSpeedText');
     registerSlider('rotLatSpeed', 'ROT LAT:', 'sliderRotLatSpeed', 'sliderRotLatSpeedText');
