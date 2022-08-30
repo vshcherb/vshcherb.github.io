@@ -4,6 +4,7 @@ const EarthRadiusEquator = 6378.137;
 const EarthRadiusPolar = 6356.752;
 const EarthSkew = EarthRadiusPolar / EarthRadiusEquator; // 0.997; // earth skew
 const TileSize = 256;
+const DenseVertices = 4;
 const HiddenCanvasTiles = 7;
 const MIN_LATITUDE = -85.0511;
 const MAX_LATITUDE = 85.0511;
@@ -213,6 +214,35 @@ function main() {
     requestAnimationFrame(render);
 }
 
+function arrayAroundTile(tileStart, alltiles) {
+    let arrafter = [];
+    let pntshift = 1;
+    let count = DenseVertices;
+    let tile = Math.floor(tileStart);
+    while (tile < alltiles) {
+        arrafter.push(tile);
+        if (count-- <= 0) {
+            pntshift = pntshift * 2;
+            count = DenseVertices;
+        }
+        tile += pntshift;
+    }
+    arrafter.push(alltiles);
+    let arrbefore = [];
+    pntshift = 1;
+    count = DenseVertices;
+    tile = Math.floor(tileStart);
+    while (tile > 0) {
+        if (count-- <= 0) {
+            pntshift = pntshift * 2;
+            count = DenseVertices;
+        }
+        arrbefore.push(tile);
+        tile -= pntshift;
+    }
+    arrbefore.push(0);
+    return arrbefore.slice(1).reverse().concat(arrafter);
+}
 
 // Initialize the buffers we'll need.
 function initBuffers(gl) {
@@ -229,9 +259,6 @@ function initBuffers(gl) {
     var vertCount = 0;
     
     const rotAngle = 2 *  Math.PI / vertAllTiles; // in radians
-    const cxTile = Math.floor(getTileNumberX(z, CONFIG.eyeLon));
-    const cyTile = Math.floor(getTileNumberY(z, CONFIG.eyeLat));
-    
     
     const texStepX = 1 / (CONFIG.textureTilesBbox[2] + 1);
     const texStepY = 1 / (CONFIG.textureTilesBbox[3] + 1);
@@ -240,35 +267,27 @@ function initBuffers(gl) {
     const texTilesWidth = 1.0 * (CONFIG.textureTilesBbox[2] + 1) / texAllTiles * vertAllTiles;
     const texTilesHeight = 1.0 * (CONFIG.textureTilesBbox[3] + 1) / texAllTiles * vertAllTiles;
 
-    let loopLength = 0;
-    const cRad = 64; //Math.max(1 << (z - 2), 2);
-    const noncStep = Math.max(1 << (z - 4), 1);
-    let xWidth = 1;
-    let yWidth = 1;
-    for (var xTile = 0; xTile < vertAllTiles; xTile += xWidth) {
-        xWidth = Math.abs(xTile - cxTile) < cRad ? 1 : noncStep;
-        loopLength ++;
-    }
-    console.log(loopLength + " " + loopLength * loopLength);
+    let xTiles = arrayAroundTile(getTileNumberX(z, CONFIG.eyeLon), vertAllTiles);
+    let yTiles = arrayAroundTile(getTileNumberY(z, CONFIG.eyeLat), vertAllTiles);
+    // console.log(xTiles.length + " " + xTiles);
+    // console.log(yTiles.length + " " + yTiles);
     // Now create an array of positions for the cube.
     let colors = [];
     let positions = [];
     let indices = []
     let textureCoordinates = [];
     let arrInd = 0;
-    for (var xTile = 0; xTile < vertAllTiles; xTile += xWidth) {
-        xWidth = Math.abs(xTile - cxTile) < cRad ? 1 : noncStep;
-        for (var yTile = 0; yTile < vertAllTiles; yTile += yWidth) {
-            yWidth = Math.abs(yTile - cyTile) < cRad ? 1 : noncStep;
+    for (let xTileInd = 1; xTileInd < xTiles.length; xTileInd ++) {
+        for (let yTileInd = 1; yTileInd < yTiles.length; yTileInd++) {
             // GEO: geolatitude = 90 - lat, geolongitude = lon - 180
             // const latt = EarthDelta + j * rotAngleLat;
             // const latb = EarthDelta + (j + 1) * rotAngleLat;
             // const lonl = i * rotAngle;
             // const lonr = (i + 1) * rotAngle;
-            const latt = Math.PI / 2 - getLatitudeFromTile(z, yTile) / (180 / Math.PI);
-            const latb = Math.PI / 2 - getLatitudeFromTile(z, yTile + yWidth) / (180 / Math.PI);
-            const lonl = getLongitudeFromTile(z, xTile) / (180 / Math.PI) + Math.PI;
-            const lonr = getLongitudeFromTile(z, xTile + xWidth) / (180 / Math.PI) + Math.PI;
+            const latt = Math.PI / 2 - getLatitudeFromTile(z, yTiles[yTileInd - 1]) / (180 / Math.PI);
+            const latb = Math.PI / 2 - getLatitudeFromTile(z, yTiles[yTileInd]) / (180 / Math.PI);
+            const lonl = getLongitudeFromTile(z, xTiles[xTileInd - 1]) / (180 / Math.PI) + Math.PI;
+            const lonr = getLongitudeFromTile(z, xTiles[xTileInd]) / (180 / Math.PI) + Math.PI;
             positions.push(
                 Math.sin(lonl) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonl) * Math.sin(latt),
                 Math.sin(lonl) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonl) * Math.sin(latb),
@@ -276,13 +295,13 @@ function initBuffers(gl) {
                 Math.sin(lonr) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonr) * Math.sin(latb),
             );
             
-            var leftTex = (xTile - texOriginX) / texTilesWidth + texStepX;
-            var rightTex = (xTile + xWidth - texOriginX) / texTilesWidth + texStepX;
+            var leftTex = (xTiles[xTileInd - 1] - texOriginX) / texTilesWidth + texStepX;
+            var rightTex = (xTiles[xTileInd] - texOriginX) / texTilesWidth + texStepX;
             if (leftTex < 0 || rightTex > 1) {
                 leftTex = 0; rightTex = texStepX; //Math.min(texStepX, texStepX * texAllTiles / vertAllTiles);
             }
-            var topTex = (yTile - texOriginY) / texTilesHeight + texStepY;
-            var bottomTex = (yTile + yWidth - texOriginY ) / texTilesHeight + texStepY;
+            var topTex = (yTiles[yTileInd - 1] - texOriginY) / texTilesHeight + texStepY;
+            var bottomTex = (yTiles[yTileInd] - texOriginY ) / texTilesHeight + texStepY;
             if (topTex < 0 || bottomTex > 1) {
                 topTex = 0; bottomTex = texStepY; //Math.min(texStepY * texAllTiles / vertAllTiles, texStepY);
             }
@@ -294,7 +313,7 @@ function initBuffers(gl) {
             indices.push(ind, ind + 1, ind + 2, ind + 2, ind + 1, ind + 3);
             ind += 4;
             vertCount += 6;
-            const c = faceColors[((xTile * vertAllTiles + yTile) * (faceColors.length / 2 - 1)) % faceColors.length];
+            const c = faceColors[((xTileInd * vertAllTiles + yTileInd) * (faceColors.length / 2 - 1)) % faceColors.length];
             // Repeat each color four times for the four vertices of the face
             colors.push(c[0], c[1], c[2], c[3]);
             colors.push(c[0], c[1], c[2], c[3]);
@@ -304,10 +323,9 @@ function initBuffers(gl) {
         }
     }
     for (var yTile = -1; yTile <= 1; yTile += 2) {
-        for (var xTile = 0; xTile < vertAllTiles; xTile += xWidth) {
-            xWidth = Math.abs(xTile - cxTile) < cRad ? 1 : noncStep;
-            var lonl = xTile * rotAngle;
-            var lonr = (xTile + xWidth) * rotAngle;
+        for (let xTileInd = 1; xTileInd < xTiles.length; xTileInd++) {
+            var lonl = xTiles[xTileInd - 1] * rotAngle;
+            var lonr = xTiles[xTileInd] * rotAngle;
             // let topAngle = EarthDelta;
             let topAngle = Math.PI / 2 - getLatitudeFromTile(z, 0) / (180 / Math.PI);
             positions.push(
