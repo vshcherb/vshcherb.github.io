@@ -33,7 +33,7 @@ const CONFIG = {
     drawMode: 'TRIANGLES',
     
     fieldOfView: (30 * Math.PI) / 180, // in radians
-    zNear: 0.0001,
+    zNear: 0.000001,
     zFar: 100
 };
 
@@ -225,10 +225,7 @@ function initBuffers(gl) {
     const rotAngle = 2 *  Math.PI / vertAllTiles; // in radians
     const cxTile = Math.floor(getTileNumberX(z, CONFIG.eyeLon));
     const cyTile = Math.floor(getTileNumberY(z, CONFIG.eyeLat));
-    const cRad = Math.max(1 << (z - 2), 2);
-    const noncStep = Math.max(1 << (z - 4), 1);
-    let xWidth = 1;
-    let yWidth = 1;
+    
     
     const texStepX = 1 / (CONFIG.textureTilesBbox[2] + 1);
     const texStepY = 1 / (CONFIG.textureTilesBbox[3] + 1);
@@ -236,11 +233,17 @@ function initBuffers(gl) {
     const texOriginY = 1.0 * CONFIG.textureTilesBbox[1] / texAllTiles * vertAllTiles;
     const texTilesWidth = 1.0 * (CONFIG.textureTilesBbox[2] + 1) / texAllTiles * vertAllTiles;
     const texTilesHeight = 1.0 * (CONFIG.textureTilesBbox[3] + 1) / texAllTiles * vertAllTiles;
+
     let loopLength = 0;
+    const cRad = 64; //Math.max(1 << (z - 2), 2);
+    const noncStep = Math.max(1 << (z - 4), 1);
+    let xWidth = 1;
+    let yWidth = 1;
     for (var xTile = 0; xTile < vertAllTiles; xTile += xWidth) {
         xWidth = Math.abs(xTile - cxTile) < cRad ? 1 : noncStep;
         loopLength ++;
     }
+    console.log(loopLength + " " + loopLength * loopLength);
     // Now create an array of positions for the cube.
     let colors = [];
     let positions = [];
@@ -270,12 +273,12 @@ function initBuffers(gl) {
             var leftTex = (xTile - texOriginX) / texTilesWidth + texStepX;
             var rightTex = (xTile + xWidth - texOriginX) / texTilesWidth + texStepX;
             if (leftTex < 0 || rightTex > 1) {
-                leftTex = 0; rightTex = Math.min(texStepX, texStepX * texAllTiles / vertAllTiles);
+                leftTex = 0; rightTex = texStepX; //Math.min(texStepX, texStepX * texAllTiles / vertAllTiles);
             }
             var topTex = (yTile - texOriginY) / texTilesHeight + texStepY;
             var bottomTex = (yTile + yWidth - texOriginY ) / texTilesHeight + texStepY;
             if (topTex < 0 || bottomTex > 1) {
-                topTex = 0; bottomTex = Math.min(texStepY * texAllTiles / vertAllTiles, texStepY);
+                topTex = 0; bottomTex = texStepY; //Math.min(texStepY * texAllTiles / vertAllTiles, texStepY);
             }
             textureCoordinates.push( 
                 // 0, 0, step * i, 0, step * i, step * j, 0, step * j,
