@@ -1,6 +1,8 @@
 
 // Some constants
-const EarthRadiusEquator = 6378.137;
+// TODO problems with rotation
+// const EarthRadiusEquator = 6378.137;
+const EarthRadiusEquator = 6356.752;
 const EarthRadiusPolar = 6356.752;
 const EarthSkew = EarthRadiusPolar / EarthRadiusEquator; // 0.997; // earth skew
 const TileSize = 256;
@@ -407,6 +409,8 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     const lookAtMatrix = mat4.create();
     const perspectiveMatrix = mat4.create();
     
+    // recalculate dynamically
+    CONFIG.zNear = (CONFIG.eyePosition / EarthRadiusEquator) / 2;
     mat4.lookAt(lookAtMatrix, eye, lookAt, vec3.fromValues(0, 1, 0));
     mat4.perspective(perspectiveMatrix, CONFIG.fieldOfView, aspect, CONFIG.zNear, CONFIG.zFar);
     mat4.multiply(projectionMatrix, lookAtMatrix, projectionMatrix);
