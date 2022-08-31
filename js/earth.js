@@ -1,7 +1,6 @@
-
 // Some constants
+// TODO autoload on tilt / on pan
 // TODO problems with rotation when radius unequal
-// TODO smooth autozoom (2 textures )
 // const EarthRadiusEquator = 6378.137;
 const EarthRadiusEquator = 6356.752;
 const EarthRadiusPolar = 6356.752;
@@ -17,7 +16,10 @@ const MIN_LONGITUDE = -180.0;
 const MAX_LONGITUDE = 180.0;
 const LONGITUDE_TURN = 360.0;
 const MIN_VERTEX_ZOOM = 5;
-const VERTEX_SPLIT_NEIGHBOOR_CF = 2; // related to HiddenCanvasTiles (so vertex zoom / tiles displayed enough)??
+const VERTEX_SPLIT_NEIGHBOOR_CF = 2; // ?? related to HiddenCanvasTiles (so vertex zoom / tiles displayed enough)??
+
+const DELAY_TO_REPLACE_FRESH_TEXTURE = 1000;
+const DELAY_TO_REPLACE_PARTIAL_TEXTURE = 250;
 
 const CONFIG = {
     loadTexture: true,
@@ -36,6 +38,8 @@ const CONFIG = {
 
     textureTilesZoom: 4,
     textureTilesBbox: {sx: 0, sy: 0, w: HiddenCanvasTiles, h: HiddenCanvasTiles},
+    uploadedTextureMeta: { sx: 0, sy: 0, w: HiddenCanvasTiles, h: HiddenCanvasTiles, z: 4 },
+    uploadedTexture: null,
     
     vertexZoom: 5,
     // defaultURL: 'https://tile.osmand.net/hd',
@@ -200,10 +204,9 @@ function main() {
     
     var then = 0;
     // Draw the scene repeatedly
-    var texture;
     function render(now) {
         if (CONFIG.loadTexture) {
-            texture = loadTilesTexture(gl);
+            loadTilesTexture(gl);
             CONFIG.loadTexture = false;
             buffers = initBuffers(gl);
             CONFIG.updateBuffer = false;
@@ -214,7 +217,7 @@ function main() {
         }
         const deltaTime = now - then;
         then = now;
-        drawScene(gl, programInfo, buffers, deltaTime / 1000.0, texture);
+        drawScene(gl, programInfo, buffers, deltaTime / 1000.0, CONFIG.uploadedTexture);
         requestAnimationFrame(render);
     }
     requestAnimationFrame(render);
@@ -247,6 +250,7 @@ function initBuffers(gl) {
     let qind = -1;
     
     let polePos = [[], []];
+    const texBBox = CONFIG.uploadedTextureMeta;
     while (++qind < queue.length) {
         let tile = queue[qind];
         if (tile.x < 0 || tile.y < 0 || tile.x >= (1 << tile.z) || tile.y >= (1 << tile.z)) {
@@ -302,14 +306,12 @@ function initBuffers(gl) {
             polePos[1].push(0, -EarthSkew, 0);
         }
         
-        let leftTex = (tile.x / getPowZoom(tile.z - CONFIG.textureTilesZoom) - CONFIG.textureTilesBbox.sx) /
-            (CONFIG.textureTilesBbox.w + 1) + texStepX;
-        let rightTex = ((tile.x + tile.wx) / getPowZoom(tile.z - CONFIG.textureTilesZoom) - CONFIG.textureTilesBbox.sx) /
-            (CONFIG.textureTilesBbox.w + 1) + texStepX;
-        let topTex = ((tile.y) / getPowZoom(tile.z - CONFIG.textureTilesZoom) - CONFIG.textureTilesBbox.sy) /
-            (CONFIG.textureTilesBbox.h + 1) + texStepY;
-        let bottomTex = ((tile.y + tile.wy) / getPowZoom(tile.z - CONFIG.textureTilesZoom) - CONFIG.textureTilesBbox.sy) /
-            (CONFIG.textureTilesBbox.h + 1) + texStepY;
+
+        
+        let leftTex = (tile.x / getPowZoom(tile.z - texBBox.z) - texBBox.sx) / (texBBox.w + 1) + texStepX;
+        let rightTex = ((tile.x + tile.wx) / getPowZoom(tile.z - texBBox.z) - texBBox.sx) / (texBBox.w + 1) + texStepX;
+        let topTex = ((tile.y) / getPowZoom(tile.z - texBBox.z) - texBBox.sy) / (texBBox.h + 1) + texStepY;
+        let bottomTex = ((tile.y + tile.wy) / getPowZoom(tile.z - texBBox.z) - texBBox.sy) / (texBBox.h + 1) + texStepY;
         if (leftTex < 0 || rightTex > 1 || topTex < 0 || bottomTex > 1) {
             leftTex = 0; rightTex = texStepX;
             topTex = 0; bottomTex = texStepY;
@@ -520,11 +522,13 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     
     gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, false, projectionMatrix);
     gl.uniformMatrix4fv(programInfo.uniformLocations.rotationMatrix, false, rotationMatrix);
-    // Specify the textures
-    // Tell WebGL we want to affect texture unit 0
-    gl.activeTexture(gl.TEXTURE0);
-    // // Bind the texture to texture unit 0
-    gl.bindTexture(gl.TEXTURE_2D, texture);
+    if (texture) {
+        // Specify the textures
+        // Tell WebGL we want to affect texture unit 0
+        gl.activeTexture(gl.TEXTURE0);
+        // // Bind the texture to texture unit 0
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+    }
     // Tell the shader we bound the texture to texture unit 0
     gl.uniform1i(programInfo.uniformLocations.uSampler, 0);
 
@@ -594,7 +598,7 @@ function loadShader(gl, type, source) {
 }
 
 let textureUploadPending = false;
-function uploadTexture(gl, texture, hdcanvas) {
+function uploadTexture(gl, texture, hdcanvas, delay) {
     textureUploadPending = true;
     setTimeout(() => {
         if (!textureUploadPending) {
@@ -614,7 +618,11 @@ function uploadTexture(gl, texture, hdcanvas) {
         // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    }, 50);
+        CONFIG.uploadedTextureMeta = Object.assign({}, CONFIG.textureTilesBbox);
+        CONFIG.uploadedTextureMeta.z = CONFIG.textureTilesZoom;
+        CONFIG.uploadedTexture = texture;
+        CONFIG.updateBuffer = true;
+    }, delay);
 }
 
 function loadTilesTexture(gl) {
@@ -644,7 +652,6 @@ function loadTilesTexture(gl) {
     ctx.fillRect(TileSize, 0, TileSize, TileSize);
 
 
-    uploadTexture(gl, texture, hdcanvas);
     const zoom = CONFIG.textureTilesZoom;
     const maxTileId = 1 << CONFIG.textureTilesZoom;
     
@@ -652,6 +659,9 @@ function loadTilesTexture(gl) {
     const startY = Math.max(0, Math.floor(getTileNumberY(zoom, CONFIG.eyeLat) - HiddenCanvasTiles / 2));
     CONFIG.textureTilesBbox.sx = startX;
     CONFIG.textureTilesBbox.sy = startY;
+    uploadTexture(gl, texture, hdcanvas, CONFIG.uploadedTexture ? 
+            DELAY_TO_REPLACE_FRESH_TEXTURE : 0);
+
     for (var x = 0; x < HiddenCanvasTiles; x++) {
         if (!(x + startX < maxTileId) ) {
             continue;
@@ -664,8 +674,11 @@ function loadTilesTexture(gl) {
             const yT = (y + 1);
             const image = new Image();
             image.onload = function () {
-                ctx.drawImage(image, xT * TileSize, yT * TileSize, TileSize, TileSize);            
-                uploadTexture(gl, texture, hdcanvas);
+                if (CONFIG.textureTilesBbox.sx == startX &&
+                    CONFIG.textureTilesZoom == zoom && CONFIG.textureTilesBbox.sy == startY) {
+                    ctx.drawImage(image, xT * TileSize, yT * TileSize, TileSize, TileSize);            
+                    uploadTexture(gl, texture, hdcanvas, DELAY_TO_REPLACE_PARTIAL_TEXTURE);
+                }
             };
             image.crossOrigin = "anonymous";
             image.src = CONFIG.defaultURL + "/" + zoom + "/" + 
