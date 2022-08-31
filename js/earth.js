@@ -1,7 +1,7 @@
 
 // Some constants
 // TODO problems with rotation when radius unequal
-// TODO autozoom
+// TODO smooth autozoom (2 textures )
 // const EarthRadiusEquator = 6378.137;
 const EarthRadiusEquator = 6356.752;
 const EarthRadiusPolar = 6356.752;
@@ -34,10 +34,10 @@ const CONFIG = {
     rotLatDir: 1,
     rotLonSpeed: 0,
 
-    textureTilesZoom: 3,
+    textureTilesZoom: 4,
     textureTilesBbox: {sx: 0, sy: 0, w: HiddenCanvasTiles, h: HiddenCanvasTiles},
     
-    vertexZoom: 4,
+    vertexZoom: 5,
     // defaultURL: 'https://tile.osmand.net/hd',
     defaultURL: 'https://tile.openstreetmap.org',
     
@@ -224,19 +224,14 @@ function main() {
 function initBuffers(gl) {
     // Now set up the colors for the faces. We'll use solid colors
     // for each face.
-    const z = CONFIG.vertexZoom;
-    const vertAllTiles = 1 << CONFIG.vertexZoom;
-    const texAllTiles = 1 << CONFIG.textureTilesZoom;
+    const z = Math.max(MIN_VERTEX_ZOOM, CONFIG.vertexZoom);    
     const faceColors = [];
     const faceColorsCount = 32;
     for (var cind = 0; cind < faceColorsCount; cind++) {
         faceColors.push(hsv2rgb((360 / faceColorsCount) * cind, 0.9, 0.9, 1));
     }
-    var ind = 0;
+    var vind = 0;
     var vertCount = 0;
-    
-    const rotAngle = 2 *  Math.PI / vertAllTiles; // in radians
-    
     const texStepX = 1 / (CONFIG.textureTilesBbox.w + 1);
     const texStepY = 1 / (CONFIG.textureTilesBbox.h + 1);
     
@@ -251,6 +246,7 @@ function initBuffers(gl) {
     let queue = [{ x: cx, y: cy, z: z, wx: 1, wy: 1, tp: 3}];
     let qind = -1;
     
+    let polePos = [[], []];
     while (++qind < queue.length) {
         let tile = queue[qind];
         if (tile.x < 0 || tile.y < 0 || tile.x >= (1 << tile.z) || tile.y >= (1 << tile.z)) {
@@ -285,20 +281,27 @@ function initBuffers(gl) {
         }
         
         // GEO: geolatitude = 90 - lat, geolongitude = lon - 180
-        // const latt = EarthDelta + j * rotAngleLat;
-        // const latb = EarthDelta + (j + 1) * rotAngleLat;
-        // const lonl = i * rotAngle;
-        // const lonr = (i + 1) * rotAngle;
         const latt = Math.PI / 2 - getLatitudeFromTile(tile.z, tile.y) / (180 / Math.PI);
         const latb = Math.PI / 2 - getLatitudeFromTile(tile.z, tile.y + tile.wy) / (180 / Math.PI);
         const lonl = getLongitudeFromTile(tile.z, tile.x) / (180 / Math.PI) + Math.PI;
         const lonr = getLongitudeFromTile(tile.z, tile.x + tile.wx) / (180 / Math.PI) + Math.PI;
-        positions.push(
-            Math.sin(lonl) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonl) * Math.sin(latt),
-            Math.sin(lonl) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonl) * Math.sin(latb),
-            Math.sin(lonr) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonr) * Math.sin(latt),
-            Math.sin(lonr) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonr) * Math.sin(latb),
-        );
+        positions.push(Math.sin(lonl) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonl) * Math.sin(latt));
+        positions.push(Math.sin(lonl) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonl) * Math.sin(latb));
+        positions.push(Math.sin(lonr) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonr) * Math.sin(latt));
+        positions.push(Math.sin(lonr) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonr) * Math.sin(latb));
+        
+        const poslen = positions.length;
+        if (tile.y == 0) {
+            polePos[0].push(positions[poslen - 12], positions[poslen - 11], positions[poslen - 10]);
+            polePos[0].push(positions[poslen - 6], positions[poslen - 5], positions[poslen - 4]);
+            polePos[0].push(0, EarthSkew, 0);
+        } 
+        if (tile.y + tile.wy == (1 << tile.z)) {
+            polePos[1].push(positions[poslen - 9], positions[poslen - 8], positions[poslen - 7]);
+            polePos[1].push(positions[poslen - 3], positions[poslen - 2], positions[poslen - 1]);
+            polePos[1].push(0, -EarthSkew, 0);
+        }
+        
         let leftTex = (tile.x / getPowZoom(tile.z - CONFIG.textureTilesZoom) - CONFIG.textureTilesBbox.sx) /
             (CONFIG.textureTilesBbox.w + 1) + texStepX;
         let rightTex = ((tile.x + tile.wx) / getPowZoom(tile.z - CONFIG.textureTilesZoom) - CONFIG.textureTilesBbox.sx) /
@@ -316,8 +319,8 @@ function initBuffers(gl) {
             leftTex, topTex, leftTex, bottomTex,
             rightTex, topTex, rightTex, bottomTex
         );
-        indices.push(ind, ind + 1, ind + 2, ind + 2, ind + 1, ind + 3);
-        ind += 4;
+        indices.push(vind, vind + 1, vind + 2, vind + 2, vind + 1, vind + 3);
+        vind += 4;
         vertCount += 6;
         const c = faceColors[(5 * qind % faceColors.length)];
         // const c = faceColors[Math.round(Math.random() * faceColors.length) % faceColors.length];
@@ -327,30 +330,25 @@ function initBuffers(gl) {
         colors.push(c[0], c[1], c[2], c[3]);
         colors.push(c[0], c[1], c[2], c[3]);
     }
+    
     // console.log("VERTICES " + qind);
-    // TODO pole
-    // for (var yTile = -1; yTile <= 1; yTile += 2) {
-    //     for (let xTileInd = 1; xTileInd < xTiles.length; xTileInd++) {
-    //         var lonl = xTiles[xTileInd - 1] * rotAngle;
-    //         var lonr = xTiles[xTileInd] * rotAngle;
-    //         // let topAngle = EarthDelta;
-    //         let topAngle = Math.PI / 2 - getLatitudeFromTile(z, 0) / (180 / Math.PI);
-    //         positions.push(
-    //             0, yTile * EarthSkew, 0,
-    //             Math.sin(lonl) * Math.sin(topAngle), EarthSkew * yTile * Math.cos(topAngle), Math.cos(lonl) * Math.sin(topAngle),
-    //             Math.sin(lonr) * Math.sin(topAngle), EarthSkew * yTile * Math.cos(topAngle), Math.cos(lonr) * Math.sin(topAngle)
-    //         );
-    //         indices.push(ind, ind + 1, ind + 2);
-    //         ind += 3;
-    //         // Repeat each color 3 times for the four vertices of the face
-    //         const c = [0.9, 0.9, 0.9, 0.9];
-    //         colors.push(c[0], c[1], c[2], c[3]);
-    //         colors.push(c[0], c[1], c[2], c[3]);
-    //         colors.push(c[0], c[1], c[2], c[3]);
-    //         textureCoordinates.push(0, 0, 0, 0, 0, 0, 0, 0);
-    //         vertCount += 3;
-    //     }
-    // }
+    
+    for (var l = 0; l < polePos.length; l++) {
+        for (let i = 0; i < polePos[l].length; i += 9) {
+            for (var k = 0; k < 9; k++) {
+                positions.push(polePos[l][i + k]);
+            }
+            indices.push(vind, vind + 1, vind + 2);
+            vind += 3;
+            vertCount += 3;
+            // Repeat each color 3 times for the four vertices of the face
+            const c = [0.9, 0.9, 0.7, 0.9];
+            colors.push(c[0], c[1], c[2], c[3]);
+            colors.push(c[0], c[1], c[2], c[3]);
+            colors.push(c[0], c[1], c[2], c[3]);
+            textureCoordinates.push(texStepX, 0, texStepX, texStepY - 0.1, 2 * texStepX, texStepY);
+        }
+    }
     
     // Now pass the list of positions into WebGL to build the
     // shape. We do this by creating a Float32Array from the
@@ -642,6 +640,9 @@ function loadTilesTexture(gl) {
         ctx.lineTo(hdcanvas.width, y);
         ctx.stroke();
     }
+    ctx.fillStyle = "#ddd"; // Ice Pole
+    ctx.fillRect(TileSize, 0, TileSize, TileSize);
+
 
     uploadTexture(gl, texture, hdcanvas);
     const zoom = CONFIG.textureTilesZoom;
