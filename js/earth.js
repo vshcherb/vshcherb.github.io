@@ -8,7 +8,8 @@ const EarthRadiusPolar = 6356.752;
 const EarthSkew = EarthRadiusPolar / EarthRadiusEquator; // 0.997; // earth skew
 const TileSize = 256;
 const DenseVertices = 4;
-const HiddenCanvasTiles = 7;
+// ! OPENGL allows only texture power of 2 !
+const HiddenCanvasTiles = 7; // 7 // 3x3 - 768x768
 const MIN_LATITUDE = -85.0511;
 const MAX_LATITUDE = 85.0511;
 const LATITUDE_TURN = 180.0;
@@ -16,12 +17,13 @@ const MIN_LONGITUDE = -180.0;
 const MAX_LONGITUDE = 180.0;
 const LONGITUDE_TURN = 360.0;
 const MIN_VERTEX_ZOOM = 5;
-const VERTEX_SPLIT_NEIGHBOOR_CF = 2; // related to HiddenCanvasTiles (so vertex zoom / tiles displayed enough)
+const VERTEX_SPLIT_NEIGHBOOR_CF = 2; // related to HiddenCanvasTiles (so vertex zoom / tiles displayed enough)??
 
 const CONFIG = {
     loadTexture: true,
     updateBuffer: false,
 
+    syncZoom: true,
     tilesOnAndGridOff: true,
 
     eyePosition: 20000,
@@ -34,7 +36,8 @@ const CONFIG = {
 
     textureTilesZoom: 3,
     textureTilesBbox: {sx: 0, sy: 0, w: HiddenCanvasTiles, h: HiddenCanvasTiles},
-    vertexZoom: 5,
+    
+    vertexZoom: 4,
     // defaultURL: 'https://tile.osmand.net/hd',
     defaultURL: 'https://tile.openstreetmap.org',
     
@@ -683,19 +686,26 @@ function updateText() {
 }
 
 function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
-    var slider = document.getElementById(idInput);
-    var sliderText = document.getElementById(idLabel);
+    const slider = document.getElementById(idInput);
+    const sliderText = document.getElementById(idLabel);
     slider.value = CONFIG[idParam];
     sliderText.value = uiPrefix + CONFIG[idParam].toString();
-    slider.addEventListener('input', function () {
+    const updateValue = function () {
         //slider.value = CONFIG[idParam].toString();
         CONFIG[idParam] = parseFloat(slider.value);
         if (flagParam) {
             CONFIG[flagParam] = true;
         }
-        sliderText.value = uiPrefix + CONFIG[idParam].toString();     
-    });
-    return slider;
+        sliderText.value = uiPrefix + CONFIG[idParam].toString();
+    };
+    slider.addEventListener('input', updateValue);
+    // return setter function
+    return function(vl) {
+        if (vl != slider.value) {
+            slider.value = vl;
+            updateValue();
+        }
+    };
 }
 
 function addListeners() {
@@ -742,9 +752,13 @@ function addListeners() {
         }
     });
 
-    
+
+    const setVertexZoom = registerSlider('vertexZoom', 'Vertex Zoom:', 'sliderZoom', 'sliderZoomText', 'updateBuffer');
+    const setTextureTilesZoom = registerSlider('textureTilesZoom', 'Tiles Zoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture');
+
     const eyeAngle = document.getElementById("sliderEyeAngle");
     const eyeAngleText = document.getElementById("sliderEyeAngleText");
+    
     function updateEyeAngleTxt() {
         const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.eyePosition / EarthRadiusEquator)) * 180 / Math.PI;
         eyeAngleText.value = "ANGLE: " + eyeAngle.value + ", " + (eyeAngle.value * lookAtAngleMax).toFixed(0) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
@@ -752,11 +766,29 @@ function addListeners() {
 
     const eyeZoom = document.getElementById("sliderEyePos");
     const eyeZoomText = document.getElementById("sliderEyePosText");
+    
     eyeZoom.value = -(Math.log(CONFIG.eyePosition / 3800) / Math.log(2)) + 5;
+    function syncZooms() {
+        if (CONFIG.syncZoom) {
+            const text = Math.max(2, Math.min(Math.floor(eyeZoom.value), 18));
+            setVertexZoom(Math.max(text + 1, 5));
+            setTextureTilesZoom(text);
+
+        }
+    }
+
     function updateEyeZoomTxt() {
         eyeZoomText.value = "Zoom: " + eyeZoom.value + ", " + CONFIG.eyePosition.toFixed(1) + " km" ; 
         updateEyeAngleTxt();
+        syncZooms();
     }
+
+
+    const syncZoom = document.getElementById("syncZoom");
+    syncZoom.addEventListener('change', function () {
+        CONFIG.syncZoom = this.checked;
+        syncZooms();
+    });
 
     function recalculateZoomValue() {
         // Observation: 9 - [ 230 km], 8 - [ 460 km], 7 - [ 910 km], 6 - [1850 km], 5 - [3900 km]
@@ -772,7 +804,6 @@ function addListeners() {
     canvas.addEventListener('wheel', (e) => {
         const delta = -(0.05 * Math.floor(e.deltaY / 4));
         eyeZoom.value = parseFloat(eyeZoom.value) + delta;
-        
         recalculateZoomValue();
     });
     updateEyeAngleTxt();
@@ -782,8 +813,6 @@ function addListeners() {
     });
 
     
-    registerSlider('vertexZoom', 'Vertex Zoom:', 'sliderZoom', 'sliderZoomText', 'updateBuffer');
-    registerSlider('textureTilesZoom', 'Tiles Zoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture' );
     
     updateText();
 
