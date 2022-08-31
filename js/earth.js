@@ -1,6 +1,7 @@
 
 // Some constants
-// TODO problems with rotation
+// TODO problems with rotation when radius unequal
+// TODO autozoom
 // const EarthRadiusEquator = 6378.137;
 const EarthRadiusEquator = 6356.752;
 const EarthRadiusPolar = 6356.752;
@@ -14,6 +15,8 @@ const LATITUDE_TURN = 180.0;
 const MIN_LONGITUDE = -180.0;
 const MAX_LONGITUDE = 180.0;
 const LONGITUDE_TURN = 360.0;
+const MIN_VERTEX_ZOOM = 5;
+const VERTEX_SPLIT_NEIGHBOOR_CF = 2; // related to HiddenCanvasTiles (so vertex zoom / tiles displayed enough)
 
 const CONFIG = {
     loadTexture: true,
@@ -30,7 +33,7 @@ const CONFIG = {
     rotLonSpeed: 0,
 
     textureTilesZoom: 3,
-    textureTilesBbox: [0, 0, HiddenCanvasTiles, HiddenCanvasTiles],
+    textureTilesBbox: {sx: 0, sy: 0, w: HiddenCanvasTiles, h: HiddenCanvasTiles},
     vertexZoom: 5,
     // defaultURL: 'https://tile.osmand.net/hd',
     defaultURL: 'https://tile.openstreetmap.org',
@@ -38,8 +41,6 @@ const CONFIG = {
     drawMode: 'TRIANGLES',
     
     fieldOfView: (30 * Math.PI) / 180, // in radians
-    zNear: 0.001,
-    zFar: 100
 };
 
 main();
@@ -216,36 +217,6 @@ function main() {
     requestAnimationFrame(render);
 }
 
-function arrayAroundTile(tileStart, alltiles) {
-    let arrafter = [];
-    let pntshift = 1;
-    let count = DenseVertices;
-    let tile = Math.floor(tileStart);
-    while (tile < alltiles) {
-        arrafter.push(tile);
-        if (count-- <= 0) {
-            pntshift = pntshift * 2;
-            count = DenseVertices;
-        }
-        tile += pntshift;
-    }
-    arrafter.push(alltiles);
-    let arrbefore = [];
-    pntshift = 1;
-    count = DenseVertices;
-    tile = Math.floor(tileStart);
-    while (tile > 0) {
-        if (count-- <= 0) {
-            pntshift = pntshift * 2;
-            count = DenseVertices;
-        }
-        arrbefore.push(tile);
-        tile -= pntshift;
-    }
-    arrbefore.push(0);
-    return arrbefore.slice(1).reverse().concat(arrafter);
-}
-
 // Initialize the buffers we'll need.
 function initBuffers(gl) {
     // Now set up the colors for the faces. We'll use solid colors
@@ -254,98 +225,129 @@ function initBuffers(gl) {
     const vertAllTiles = 1 << CONFIG.vertexZoom;
     const texAllTiles = 1 << CONFIG.textureTilesZoom;
     const faceColors = [];
-    for (var cind = 0; cind < vertAllTiles * 2; cind++) {
-        faceColors.push(hsv2rgb((360 / (vertAllTiles * 2)) * cind, 0.9, 0.9, 1));
+    const faceColorsCount = 32;
+    for (var cind = 0; cind < faceColorsCount; cind++) {
+        faceColors.push(hsv2rgb((360 / faceColorsCount) * cind, 0.9, 0.9, 1));
     }
     var ind = 0;
     var vertCount = 0;
     
     const rotAngle = 2 *  Math.PI / vertAllTiles; // in radians
     
-    const texStepX = 1 / (CONFIG.textureTilesBbox[2] + 1);
-    const texStepY = 1 / (CONFIG.textureTilesBbox[3] + 1);
-    const texOriginX = 1.0 * CONFIG.textureTilesBbox[0] / texAllTiles * vertAllTiles;
-    const texOriginY = 1.0 * CONFIG.textureTilesBbox[1] / texAllTiles * vertAllTiles;
-    const texTilesWidth = 1.0 * (CONFIG.textureTilesBbox[2] + 1) / texAllTiles * vertAllTiles;
-    const texTilesHeight = 1.0 * (CONFIG.textureTilesBbox[3] + 1) / texAllTiles * vertAllTiles;
-
-    let xTiles = arrayAroundTile(getTileNumberX(z, CONFIG.eyeLon), vertAllTiles);
-    let yTiles = arrayAroundTile(getTileNumberY(z, CONFIG.eyeLat), vertAllTiles);
-    // console.log(xTiles.length + " " + xTiles);
-    // console.log(yTiles.length + " " + yTiles);
+    const texStepX = 1 / (CONFIG.textureTilesBbox.w + 1);
+    const texStepY = 1 / (CONFIG.textureTilesBbox.h + 1);
+    
+    let cx = Math.floor(getTileNumberX(z, CONFIG.eyeLon));
+    let cy = Math.floor(getTileNumberY(z, CONFIG.eyeLat));
     // Now create an array of positions for the cube.
     let colors = [];
     let positions = [];
     let indices = []
     let textureCoordinates = [];
-    let arrInd = 0;
-    for (let xTileInd = 1; xTileInd < xTiles.length; xTileInd ++) {
-        for (let yTileInd = 1; yTileInd < yTiles.length; yTileInd++) {
-            // GEO: geolatitude = 90 - lat, geolongitude = lon - 180
-            // const latt = EarthDelta + j * rotAngleLat;
-            // const latb = EarthDelta + (j + 1) * rotAngleLat;
-            // const lonl = i * rotAngle;
-            // const lonr = (i + 1) * rotAngle;
-            const latt = Math.PI / 2 - getLatitudeFromTile(z, yTiles[yTileInd - 1]) / (180 / Math.PI);
-            const latb = Math.PI / 2 - getLatitudeFromTile(z, yTiles[yTileInd]) / (180 / Math.PI);
-            const lonl = getLongitudeFromTile(z, xTiles[xTileInd - 1]) / (180 / Math.PI) + Math.PI;
-            const lonr = getLongitudeFromTile(z, xTiles[xTileInd]) / (180 / Math.PI) + Math.PI;
-            positions.push(
-                Math.sin(lonl) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonl) * Math.sin(latt),
-                Math.sin(lonl) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonl) * Math.sin(latb),
-                Math.sin(lonr) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonr) * Math.sin(latt),
-                Math.sin(lonr) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonr) * Math.sin(latb),
-            );
-            
-            var leftTex = (xTiles[xTileInd - 1] - texOriginX) / texTilesWidth + texStepX;
-            var rightTex = (xTiles[xTileInd] - texOriginX) / texTilesWidth + texStepX;
-            if (leftTex < 0 || rightTex > 1) {
-                leftTex = 0; rightTex = texStepX; //Math.min(texStepX, texStepX * texAllTiles / vertAllTiles);
-            }
-            var topTex = (yTiles[yTileInd - 1] - texOriginY) / texTilesHeight + texStepY;
-            var bottomTex = (yTiles[yTileInd] - texOriginY ) / texTilesHeight + texStepY;
-            if (topTex < 0 || bottomTex > 1) {
-                topTex = 0; bottomTex = texStepY; //Math.min(texStepY * texAllTiles / vertAllTiles, texStepY);
-            }
-            textureCoordinates.push( 
-                // 0, 0, step * i, 0, step * i, step * j, 0, step * j,
-                leftTex, topTex, leftTex, bottomTex, 
-                rightTex, topTex, rightTex, bottomTex
-            );
-            indices.push(ind, ind + 1, ind + 2, ind + 2, ind + 1, ind + 3);
-            ind += 4;
-            vertCount += 6;
-            const c = faceColors[((xTileInd * vertAllTiles + yTileInd) * (faceColors.length / 2 - 1)) % faceColors.length];
-            // Repeat each color four times for the four vertices of the face
-            colors.push(c[0], c[1], c[2], c[3]);
-            colors.push(c[0], c[1], c[2], c[3]);
-            colors.push(c[0], c[1], c[2], c[3]);
-            colors.push(c[0], c[1], c[2], c[3]);
-            arrInd++;
+    // TODO 1) tp ? 2) wh=wy=1 always 3) holes 
+    let queue = [{ x: cx, y: cy, z: z, wx: 1, wy: 1, tp: 3}];
+    let qind = -1;
+    
+    while (++qind < queue.length) {
+        let tile = queue[qind];
+        if (tile.x < 0 || tile.y < 0 || tile.x >= (1 << tile.z) || tile.y >= (1 << tile.z)) {
+            continue;
         }
-    }
-    for (var yTile = -1; yTile <= 1; yTile += 2) {
-        for (let xTileInd = 1; xTileInd < xTiles.length; xTileInd++) {
-            var lonl = xTiles[xTileInd - 1] * rotAngle;
-            var lonr = xTiles[xTileInd] * rotAngle;
-            // let topAngle = EarthDelta;
-            let topAngle = Math.PI / 2 - getLatitudeFromTile(z, 0) / (180 / Math.PI);
-            positions.push(
-                0, yTile * EarthSkew, 0,
-                Math.sin(lonl) * Math.sin(topAngle), EarthSkew * yTile * Math.cos(topAngle), Math.cos(lonl) * Math.sin(topAngle),
-                Math.sin(lonr) * Math.sin(topAngle), EarthSkew * yTile * Math.cos(topAngle), Math.cos(lonr) * Math.sin(topAngle)
-            );
-            indices.push(ind, ind + 1, ind + 2);
-            ind += 3;
-            // Repeat each color 3 times for the four vertices of the face
-            const c = [0.9, 0.9, 0.9, 0.9];
-            colors.push(c[0], c[1], c[2], c[3]);
-            colors.push(c[0], c[1], c[2], c[3]);
-            colors.push(c[0], c[1], c[2], c[3]);
-            textureCoordinates.push(0, 0, 0, 0, 0, 0, 0, 0);
-            vertCount += 3;
+        // tile[4] - 0 [add full tile or split], 3, 1 (special case start) - add parents + (neighboors
+        if (tile.tp % 2 == 1) {
+            let nextx = tile.x + ((tile.x / tile.wx) % 2 == 1 ? -tile.wx : tile.wx);
+            let nexty = tile.y + ((tile.y / tile.wy) % 2 == 1 ? -tile.wy : tile.wy);
+            // add 3 neigbhours
+            queue.push({ x: tile.x, y: nexty, z: tile.z, wx: tile.wx, wy: tile.wy, tp: 0 });
+            queue.push({ x: nextx, y: tile.y, z: tile.z, wx: tile.wx, wy: tile.wy, tp: 0});
+            queue.push({ x: nextx,  y: nexty, z: tile.z, wx: tile.wx, wy: tile.wy, tp: 0});
+            // add parent
+            queue.push({
+                x: Math.floor(nextx / (2 * tile.wx)) * tile.wx,
+                y: Math.floor(nexty / (2 * tile.wy)) * tile.wy,
+                z: tile.z - 1, wx: tile.wx, wy: tile.wy, tp: 1
+            });
+            if (tile.tp == 1) {
+                // inner tiles already processed
+                continue;
+            }
+        } else if (tile.z < MIN_VERTEX_ZOOM
+               || (tile.z < z && Math.abs((cx >> (z - tile.z)) - tile.x) <= VERTEX_SPLIT_NEIGHBOOR_CF
+                              && Math.abs((cy >> (z - tile.z)) - tile.y) <= VERTEX_SPLIT_NEIGHBOOR_CF)) {
+            queue.push({ x: tile.x * 2, y: tile.y * 2, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
+            queue.push({ x: tile.x * 2 + 1, y: tile.y * 2, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
+            queue.push({ x: tile.x * 2, y: tile.y * 2 + 1, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
+            queue.push({ x: tile.x * 2 + 1, y: tile.y * 2 + 1, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
+            continue;
         }
+        
+        // GEO: geolatitude = 90 - lat, geolongitude = lon - 180
+        // const latt = EarthDelta + j * rotAngleLat;
+        // const latb = EarthDelta + (j + 1) * rotAngleLat;
+        // const lonl = i * rotAngle;
+        // const lonr = (i + 1) * rotAngle;
+        const latt = Math.PI / 2 - getLatitudeFromTile(tile.z, tile.y) / (180 / Math.PI);
+        const latb = Math.PI / 2 - getLatitudeFromTile(tile.z, tile.y + tile.wy) / (180 / Math.PI);
+        const lonl = getLongitudeFromTile(tile.z, tile.x) / (180 / Math.PI) + Math.PI;
+        const lonr = getLongitudeFromTile(tile.z, tile.x + tile.wx) / (180 / Math.PI) + Math.PI;
+        positions.push(
+            Math.sin(lonl) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonl) * Math.sin(latt),
+            Math.sin(lonl) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonl) * Math.sin(latb),
+            Math.sin(lonr) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonr) * Math.sin(latt),
+            Math.sin(lonr) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonr) * Math.sin(latb),
+        );
+        let leftTex = (tile.x / getPowZoom(tile.z - CONFIG.textureTilesZoom) - CONFIG.textureTilesBbox.sx) /
+            (CONFIG.textureTilesBbox.w + 1) + texStepX;
+        let rightTex = ((tile.x + tile.wx) / getPowZoom(tile.z - CONFIG.textureTilesZoom) - CONFIG.textureTilesBbox.sx) /
+            (CONFIG.textureTilesBbox.w + 1) + texStepX;
+        let topTex = ((tile.y) / getPowZoom(tile.z - CONFIG.textureTilesZoom) - CONFIG.textureTilesBbox.sy) /
+            (CONFIG.textureTilesBbox.h + 1) + texStepY;
+        let bottomTex = ((tile.y + tile.wy) / getPowZoom(tile.z - CONFIG.textureTilesZoom) - CONFIG.textureTilesBbox.sy) /
+            (CONFIG.textureTilesBbox.h + 1) + texStepY;
+        if (leftTex < 0 || rightTex > 1 || topTex < 0 || bottomTex > 1) {
+            leftTex = 0; rightTex = texStepX;
+            topTex = 0; bottomTex = texStepY;
+        }
+        textureCoordinates.push(
+            // 0, 0, step * i, 0, step * i, step * j, 0, step * j,
+            leftTex, topTex, leftTex, bottomTex,
+            rightTex, topTex, rightTex, bottomTex
+        );
+        indices.push(ind, ind + 1, ind + 2, ind + 2, ind + 1, ind + 3);
+        ind += 4;
+        vertCount += 6;
+        const c = faceColors[(5 * qind % faceColors.length)];
+        // const c = faceColors[Math.round(Math.random() * faceColors.length) % faceColors.length];
+        // Repeat each color four times for the four vertices of the face
+        colors.push(c[0], c[1], c[2], c[3]);
+        colors.push(c[0], c[1], c[2], c[3]);
+        colors.push(c[0], c[1], c[2], c[3]);
+        colors.push(c[0], c[1], c[2], c[3]);
     }
+    // console.log("VERTICES " + qind);
+    // TODO pole
+    // for (var yTile = -1; yTile <= 1; yTile += 2) {
+    //     for (let xTileInd = 1; xTileInd < xTiles.length; xTileInd++) {
+    //         var lonl = xTiles[xTileInd - 1] * rotAngle;
+    //         var lonr = xTiles[xTileInd] * rotAngle;
+    //         // let topAngle = EarthDelta;
+    //         let topAngle = Math.PI / 2 - getLatitudeFromTile(z, 0) / (180 / Math.PI);
+    //         positions.push(
+    //             0, yTile * EarthSkew, 0,
+    //             Math.sin(lonl) * Math.sin(topAngle), EarthSkew * yTile * Math.cos(topAngle), Math.cos(lonl) * Math.sin(topAngle),
+    //             Math.sin(lonr) * Math.sin(topAngle), EarthSkew * yTile * Math.cos(topAngle), Math.cos(lonr) * Math.sin(topAngle)
+    //         );
+    //         indices.push(ind, ind + 1, ind + 2);
+    //         ind += 3;
+    //         // Repeat each color 3 times for the four vertices of the face
+    //         const c = [0.9, 0.9, 0.9, 0.9];
+    //         colors.push(c[0], c[1], c[2], c[3]);
+    //         colors.push(c[0], c[1], c[2], c[3]);
+    //         colors.push(c[0], c[1], c[2], c[3]);
+    //         textureCoordinates.push(0, 0, 0, 0, 0, 0, 0, 0);
+    //         vertCount += 3;
+    //     }
+    // }
     
     // Now pass the list of positions into WebGL to build the
     // shape. We do this by creating a Float32Array from the
@@ -410,9 +412,10 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     const perspectiveMatrix = mat4.create();
     
     // recalculate dynamically
-    CONFIG.zNear = (CONFIG.eyePosition / EarthRadiusEquator) / 2;
+    const zNear = (CONFIG.eyePosition / EarthRadiusEquator) / 2;
+    const zFar = 100;
     mat4.lookAt(lookAtMatrix, eye, lookAt, vec3.fromValues(0, 1, 0));
-    mat4.perspective(perspectiveMatrix, CONFIG.fieldOfView, aspect, CONFIG.zNear, CONFIG.zFar);
+    mat4.perspective(perspectiveMatrix, CONFIG.fieldOfView, aspect, zNear, zFar);
     mat4.multiply(projectionMatrix, lookAtMatrix, projectionMatrix);
     mat4.multiply(projectionMatrix, perspectiveMatrix, projectionMatrix);
 
@@ -643,8 +646,8 @@ function loadTilesTexture(gl) {
     
     const startX = Math.max(0, Math.floor(getTileNumberX(zoom, CONFIG.eyeLon) - HiddenCanvasTiles / 2));
     const startY = Math.max(0, Math.floor(getTileNumberY(zoom, CONFIG.eyeLat) - HiddenCanvasTiles / 2));
-    CONFIG.textureTilesBbox[0] = startX;
-    CONFIG.textureTilesBbox[1] = startY;
+    CONFIG.textureTilesBbox.sx = startX;
+    CONFIG.textureTilesBbox.sy = startY;
     for (var x = 0; x < HiddenCanvasTiles; x++) {
         if (!(x + startX < maxTileId) ) {
             continue;
@@ -751,7 +754,7 @@ function addListeners() {
     const eyeZoomText = document.getElementById("sliderEyePosText");
     eyeZoom.value = -(Math.log(CONFIG.eyePosition / 3800) / Math.log(2)) + 5;
     function updateEyeZoomTxt() {
-        eyeZoomText.value = "CAM " + CONFIG.eyePosition.toFixed(0) + " km, " + eyeZoom.value + " z"; 
+        eyeZoomText.value = "Zoom: " + eyeZoom.value + ", " + CONFIG.eyePosition.toFixed(1) + " km" ; 
         updateEyeAngleTxt();
     }
 
@@ -779,10 +782,6 @@ function addListeners() {
     });
 
     
-    
-    registerSlider('zNear', 'zNear:', 'sliderZNear', 'sliderZNearText');
-    registerSlider('zFar', 'zFar:', 'sliderZFar', 'sliderZFarText');
-
     registerSlider('vertexZoom', 'Vertex Zoom:', 'sliderZoom', 'sliderZoomText', 'updateBuffer');
     registerSlider('textureTilesZoom', 'Tiles Zoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture' );
     
