@@ -1,9 +1,14 @@
-// TODO 3800
 // TODO autoload tiles on tilt / on pan
-// TODO problems with rotation when radius unequal
+// TODO autochange cam height on panning
 // TODO holes between inequal tiles
+// TODO precise drag/drop movements 
+
+// ! OPENGL allows only texture power of 2 !
+const TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
+let GlCanvasSize = 1024; // < TilesCanvasSize * TileSize
 
 // Global CONSTANTS
+// TODO Ellipse earth: 1) getDistance 2) problem with rotation (camera height)
 // const EarthRadiusEquator = 6378.137;
 const EarthRadiusEquator = 6356.752;
 const EarthRadiusPolar = 6356.752;
@@ -20,9 +25,13 @@ const DELAY_TO_REPLACE_PARTIAL_TEXTURE = 250;
 
 // Tiles loading
 const TileURL = 'https://tile.openstreetmap.org';
+const TileMinZoom = 1;
+const TileMaxZoom = 18;
 const TileSize = 256;
-// ! OPENGL allows only texture power of 2 !
-const TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
+const TileMagicPixelPerfect = 0.005; // ???
+
+// 2 - Plane z Near set in the middle between camera [0, eyePosition/ EarthRadiusEquator, 0] and Earth Look [0, 1, 0] 
+const PlaneZNear = 2; 
 
 const CONFIG = {
     loadTexture: true,
@@ -31,7 +40,9 @@ const CONFIG = {
     syncZoom: true,
     tilesOnAndGridOff: true,
 
-    eyePosition: 20000,
+    eyePosition: 20000, // insync with eyeZoom
+    eyeZoom : 2.5,
+
     eyeAngle: 0,
     eyeLat: 52.37313,
     eyeLon: 4.89875,
@@ -46,7 +57,7 @@ const CONFIG = {
     
     // global vertices rendering
     minVertexZoom: 5,
-    vertexSpiral: 2, // ?? related to HiddenCanvasTiles (so vertex zoom / tiles displayed enough)??
+    vertexSpiral: 2, // ?? related to TilesCanvasSize GlCanvasSize (so vertex zoom / tiles displayed enough)??
 
     vertexZoom: 5,
     drawMode: 'TRIANGLES',
@@ -96,6 +107,14 @@ function checkLatitude(latitude) {
     return latitude;
 }
 
+
+function getDistance(lat1, lon1, lat2, lon2) {
+    let dLat = checkLatitude(lat2 - lat1) / 180.0 * Math.PI;
+    let dLon = checkLongitude(lon2 - lon1) / 180.0 * Math.PI;
+    let a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 / 180.0 * Math.PI) * Math.cos(lat2 / 180.0 * Math.PI) *
+        Math.sin(dLon / 2 / 180.0 * Math.PI) * Math.sin(dLon / 2 / 180.0 * Math.PI);
+    return (2 * EarthRadiusEquator * 1000 * Math.asin(Math.sqrt(a)));
+}
 function getTileNumberY(zoom, latitude) {
     latitude = checkLatitude(latitude) / 180.0 * Math.PI;
 	let eval = Math.log(Math.tan(latitude) + 1 / Math.cos(latitude));
@@ -130,7 +149,10 @@ function getPowZoom(zoom) {
 
 // Start here
 function main() {
+    GlCanvasSize = Math.min(document.body.clientWidth / 2, 1024);
     const canvas = document.querySelector("#glcanvas");
+    canvas.width = GlCanvasSize;
+    canvas.height = GlCanvasSize;
     const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
     // If we don't have a GL context, give up now
     if (!gl) {
@@ -415,7 +437,7 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     const perspectiveMatrix = mat4.create();
     
     // recalculate dynamically
-    const zNear = (CONFIG.eyePosition / EarthRadiusEquator) / 2;
+    const zNear = (CONFIG.eyePosition / EarthRadiusEquator) / PlaneZNear;
     const zFar = 100;
     mat4.lookAt(lookAtMatrix, eye, lookAt, vec3.fromValues(0, 1, 0));
     mat4.perspective(perspectiveMatrix, CONFIG.fieldOfView, aspect, zNear, zFar);
@@ -784,23 +806,19 @@ function addListeners() {
     const eyeZoom = document.getElementById("sliderEyePos");
     const eyeZoomText = document.getElementById("sliderEyePosText");
     
-    // TODO 3800
-    eyeZoom.value = -(Math.log(CONFIG.eyePosition / 3800) / Math.log(2)) + 5;
     function syncZooms() {
         if (CONFIG.syncZoom) {
-            const text = Math.max(2, Math.min(Math.floor(eyeZoom.value), 18));
-            setVertexZoom(Math.max(text + 1, 5));
+            const text = Math.max(Math.max(TileMinZoom, 2), Math.min(Math.floor(CONFIG.eyeZoom), TileMaxZoom));
+            setVertexZoom(Math.max(text + 1, CONFIG.minVertexZoom));
             setTextureTilesZoom(text);
-
         }
     }
 
     function updateEyeZoomTxt() {
-        eyeZoomText.value = "Zoom: " + eyeZoom.value + ", " + CONFIG.eyePosition.toFixed(1) + " km" ; 
+        eyeZoomText.value = "Zoom: " + CONFIG.eyeZoom.toFixed(2) + ", " + CONFIG.eyePosition.toFixed(CONFIG.eyePosition < 1 ? 2 : 1) + " km" ; 
         updateEyeAngleTxt();
         syncZooms();
     }
-
 
     const syncZoom = document.getElementById("syncZoom");
     syncZoom.addEventListener('change', function () {
@@ -808,24 +826,32 @@ function addListeners() {
         syncZooms();
     });
 
-    function recalculateZoomValue() {
-        // Observation: 9 - [ 230 km], 8 - [ 460 km], 7 - [ 910 km], 6 - [1850 km], 5 - [3900 km]
-        //CONFIG.eyePosition = Math.pow(2, 5 - eyeZoom.value) * 3800;
-        // TODO 3800
-        CONFIG.eyePosition = Math.pow(2, 4 - eyeZoom.value) * EarthRadiusEquator;
-        // CONFIG.eyePosition = 100000 / Math.exp((eyeZoom.value + 2)/ 20 * Math.log(10000));
+    function setCamZoomValue(vl) {
+        CONFIG.eyeZoom = vl;
+        eyeZoom.value = CONFIG.eyeZoom;
+        let z = Math.max(2, Math.floor(CONFIG.eyeZoom));
+        const x = getTileNumberX(z, CONFIG.eyeLon);
+        const y = getTileNumberY(z, CONFIG.eyeLat);
+        let tileWidthKm = getDistance(getLatitudeFromTile(z, Math.floor(y)), getLongitudeFromTile(z, x), getLatitudeFromTile(z, Math.floor(y) + 1), 
+            getLongitudeFromTile(z, x)) / 1000;
+        
+        let tilesToFitScreen = (GlCanvasSize / TileSize) * PlaneZNear;
+        let screenInKm = (tileWidthKm * getPowZoom(z - CONFIG.eyeZoom) * tilesToFitScreen);
+        CONFIG.eyePosition = (screenInKm / 2) / (Math.tan(CONFIG.fieldOfView)) * (1 + TileMagicPixelPerfect*z); 
+        // CONFIG.eyePosition = Math.pow(2, 4 - eyeZoom.value) * EarthRadiusEquator;
         updateEyeZoomTxt();
     }
-    updateEyeZoomTxt();
 
+    setCamZoomValue(CONFIG.eyeZoom);
     eyeZoom.addEventListener('input', function () {
-        recalculateZoomValue();
+        setCamZoomValue(parseFloat(eyeZoom.value));
     });
+
     canvas.addEventListener('wheel', (e) => {
         const delta = -(0.05 * Math.floor(e.deltaY / 4));
-        eyeZoom.value = parseFloat(eyeZoom.value) + delta;
-        recalculateZoomValue();
+        setCamZoomValue(Math.max(0, Math.min(22, CONFIG.eyeZoom + delta)));
     });
+
     updateEyeAngleTxt();
     eyeAngle.addEventListener('input', function () {
         CONFIG.eyeAngle = eyeAngle.value;
