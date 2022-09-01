@@ -23,7 +23,7 @@
                 <option disabled selected>Draw mode</option>
                 <option value="TRIANGLES">Triangles *</option>
                 <option value="TILES_GRID">Colored Tiles</option>
-                
+            
                 <option value="POINTS">Points</option>
                 <option value="LINES">Lines</option>
                 <option value="LINE_STRIP">Line Strip</option>
@@ -32,45 +32,54 @@
                 <option value="TRIANGLE_FAN">Triangle Fan</option>
             </select>
             <span>* denotes default values</span>
-    
-                <h3>Zoom / Distance</h3>
-                <div class="">
-                    Sync zooms <input type="checkbox" id="syncZoom" checked/>
-                </div>
-
-                <div class="sliderGroup">
-                    <input type="text" id="sliderEyePosText" disabled />
-                    <input type="range" id="sliderEyePos" min="0" max="20" step="0.05" />
-                </div>
-                
-                <div class="sliderGroup">
-                    <input type="text" id="sliderZoomText" disabled />
-                    <input type="range" id="sliderZoom" min="2" max="20" step="1" />
-                </div>
-                <div class="sliderGroup">
-                    <input type="text" id="sliderTextureZoomText" disabled />
-                    <input type="range" id="sliderTextureZoom" min="0" max="18" step="1" />
-                </div>
-
-                <h3>Camera</h3>
-                <div class="sliderGroup">
-                    <input type="text" id="sliderEyeAngleText" disabled />
-                    <input type="range" id="sliderEyeAngle" min="0" max="1" step="0.05" value="0" />
-                </div>
-                
-                <div class="sliderGroup">
-                    <input type="text" id="latText" disabled />
-                    <input type="text" id="sliderRotLatSpeedText" disabled />
-                    <input type="range" id="sliderRotLatSpeed" min="0" max="10" step="0.1" />
-                </div>
-                
-                <div class="sliderGroup">
-                    <input type="text" id="lonText" disabled />
-                    <input type="text" id="sliderRotLonSpeedText" disabled />
-                    <input type="range" id="sliderRotLonSpeed" min="0" max="10" step="0.1" />
-                </div>
-
+            <br>
+            <div class="sliderGroup">
+                <input type="text" id="sliderMinVertexZoomText" disabled />
+                <input type="range" id="sliderMinVertexZoom" min="2" max="7" step="1" />
+            </div>
+            <div class="sliderGroup">
+                <input type="text" id="sliderVertexSpiralText" disabled />
+                <input type="range" id="sliderVertexSpiral" min="1" max="4" step="1" />
+            </div>
             
+            
+            <h3>Zoom / Distance</h3>
+            <div class="">
+                Sync zooms <input type="checkbox" id="syncZoom" checked />
+            </div>
+            
+            <div class="sliderGroup">
+                <input type="text" id="sliderEyePosText" disabled />
+                <input type="range" id="sliderEyePos" min="0" max="20" step="0.05" />
+            </div>
+            
+            <div class="sliderGroup">
+                <input type="text" id="sliderVertexZoomText" disabled />
+                <input type="range" id="sliderVertexZoom" min="2" max="20" step="1" />
+            </div>
+            <div class="sliderGroup">
+                <input type="text" id="sliderTextureZoomText" disabled />
+                <input type="range" id="sliderTextureZoom" min="0" max="18" step="1" />
+            </div>
+            
+            
+            <h3>Camera</h3>
+            <div class="sliderGroup">
+                <input type="text" id="sliderEyeAngleText" disabled />
+                <input type="range" id="sliderEyeAngle" min="0" max="1" step="0.05" value="0" />
+            </div>
+            
+            <div class="sliderGroup">
+                <input type="text" id="latText" disabled />
+                <input type="text" id="sliderRotLatSpeedText" disabled />
+                <input type="range" id="sliderRotLatSpeed" min="0" max="10" step="0.1" />
+            </div>
+            
+            <div class="sliderGroup">
+                <input type="text" id="lonText" disabled />
+                <input type="text" id="sliderRotLonSpeedText" disabled />
+                <input type="range" id="sliderRotLonSpeed" min="0" max="10" step="0.1" />
+            </div>
             
         </div>
     </div>

@@ -15,8 +15,6 @@ const LATITUDE_TURN = 180.0;
 const MIN_LONGITUDE = -180.0;
 const MAX_LONGITUDE = 180.0;
 const LONGITUDE_TURN = 360.0;
-const MIN_VERTEX_ZOOM = 5;
-const VERTEX_SPLIT_NEIGHBOOR_CF = 2; // ?? related to HiddenCanvasTiles (so vertex zoom / tiles displayed enough)??
 
 const DELAY_TO_REPLACE_FRESH_TEXTURE = 1000;
 const DELAY_TO_REPLACE_PARTIAL_TEXTURE = 250;
@@ -41,6 +39,10 @@ const CONFIG = {
     uploadedTextureMeta: { sx: 0, sy: 0, w: HiddenCanvasTiles, h: HiddenCanvasTiles, z: 4 },
     uploadedTexture: null,
     
+    // global vertices rendering
+    minVertexZoom: 4,
+    vertexSpiral: 2, // ?? related to HiddenCanvasTiles (so vertex zoom / tiles displayed enough)??
+
     vertexZoom: 5,
     // defaultURL: 'https://tile.osmand.net/hd',
     defaultURL: 'https://tile.openstreetmap.org',
@@ -227,7 +229,7 @@ function main() {
 function initBuffers(gl) {
     // Now set up the colors for the faces. We'll use solid colors
     // for each face.
-    const z = Math.max(MIN_VERTEX_ZOOM, CONFIG.vertexZoom);    
+    const z = Math.max(CONFIG.minVertexZoom, CONFIG.vertexZoom);    
     const faceColors = [];
     const faceColorsCount = 32;
     for (var cind = 0; cind < faceColorsCount; cind++) {
@@ -274,9 +276,9 @@ function initBuffers(gl) {
                 // inner tiles already processed
                 continue;
             }
-        } else if (tile.z < MIN_VERTEX_ZOOM
-               || (tile.z < z && Math.abs((cx >> (z - tile.z)) - tile.x) <= VERTEX_SPLIT_NEIGHBOOR_CF
-                              && Math.abs((cy >> (z - tile.z)) - tile.y) <= VERTEX_SPLIT_NEIGHBOOR_CF)) {
+        } else if (tile.z < CONFIG.minVertexZoom
+               || (tile.z < z && Math.abs((cx >> (z - tile.z)) - tile.x) <= CONFIG.vertexSpiral
+                              && Math.abs((cy >> (z - tile.z)) - tile.y) <= CONFIG.vertexSpiral)) {
             queue.push({ x: tile.x * 2, y: tile.y * 2, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
             queue.push({ x: tile.x * 2 + 1, y: tile.y * 2, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
             queue.push({ x: tile.x * 2, y: tile.y * 2 + 1, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
@@ -376,6 +378,9 @@ function initBuffers(gl) {
     // Now send the element array to GL
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
     
+    // hack to display on ui 
+    document.getElementById('sliderVertexZoomText').value = 'Vertex zoom: ' + CONFIG.vertexZoom + ', ' +
+        vertCount;
     return {
         verticesCount: vertCount,
         textureCoord: textureCoordBuffer,
@@ -765,11 +770,14 @@ function addListeners() {
             mouseCoords = newCoords;
         }
     });
+    CONFIG.vertexSpiral
 
+    registerSlider('minVertexZoom', 'Min Vertex Zoom:', 'sliderMinVertexZoom', 'sliderMinVertexZoomText', 'updateBuffer');
+    registerSlider('vertexSpiral', 'Vertex Details Zoom:', 'sliderVertexSpiral', 'sliderVertexSpiralText', 'updateBuffer');
 
-    const setVertexZoom = registerSlider('vertexZoom', 'Vertex Zoom:', 'sliderZoom', 'sliderZoomText', 'updateBuffer');
+    const setVertexZoom = registerSlider('vertexZoom', 'Vertex Zoom:', 'sliderVertexZoom', 'sliderVertexZoomText', 'updateBuffer');
     const setTextureTilesZoom = registerSlider('textureTilesZoom', 'Tiles Zoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture');
-
+    
     const eyeAngle = document.getElementById("sliderEyeAngle");
     const eyeAngleText = document.getElementById("sliderEyeAngleText");
     
@@ -781,6 +789,7 @@ function addListeners() {
     const eyeZoom = document.getElementById("sliderEyePos");
     const eyeZoomText = document.getElementById("sliderEyePosText");
     
+    // TODO 3800
     eyeZoom.value = -(Math.log(CONFIG.eyePosition / 3800) / Math.log(2)) + 5;
     function syncZooms() {
         if (CONFIG.syncZoom) {
@@ -806,7 +815,9 @@ function addListeners() {
 
     function recalculateZoomValue() {
         // Observation: 9 - [ 230 km], 8 - [ 460 km], 7 - [ 910 km], 6 - [1850 km], 5 - [3900 km]
-        CONFIG.eyePosition = Math.pow(2, 5 - eyeZoom.value) * 3800;
+        //CONFIG.eyePosition = Math.pow(2, 5 - eyeZoom.value) * 3800;
+        // TODO 3800
+        CONFIG.eyePosition = Math.pow(2, 4 - eyeZoom.value) * EarthRadiusEquator;
         // CONFIG.eyePosition = 100000 / Math.exp((eyeZoom.value + 2)/ 20 * Math.log(10000));
         updateEyeZoomTxt();
     }
