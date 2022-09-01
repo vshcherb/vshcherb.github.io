@@ -1,5 +1,5 @@
 // TODO autoload tiles on tilt / on pan
-// TODO autochange cam height on panning
+// TODO autochange cam height on panning (different projection)
 // TODO holes between inequal tiles
 // TODO precise drag/drop movements 
 
@@ -28,7 +28,6 @@ const TileURL = 'https://tile.openstreetmap.org';
 const TileMinZoom = 1;
 const TileMaxZoom = 18;
 const TileSize = 256;
-const TileMagicPixelPerfect = 0.005; // ???
 
 // 2 - Plane z Near set in the middle between camera [0, eyePosition/ EarthRadiusEquator, 0] and Earth Look [0, 1, 0] 
 const PlaneZNear = 2; 
@@ -62,7 +61,7 @@ const CONFIG = {
     vertexZoom: 5,
     drawMode: 'TRIANGLES',
     
-    fieldOfView: (30 * Math.PI) / 180, // in radians
+    fieldOfView: 60, // degrees up to 180
 };
 
 main();
@@ -149,7 +148,7 @@ function getPowZoom(zoom) {
 
 // Start here
 function main() {
-    GlCanvasSize = Math.min(document.body.clientWidth / 2, 1024);
+    GlCanvasSize = Math.min(document.body.clientWidth / 2, 512);
     const canvas = document.querySelector("#glcanvas");
     canvas.width = GlCanvasSize;
     canvas.height = GlCanvasSize;
@@ -440,7 +439,7 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     const zNear = (CONFIG.eyePosition / EarthRadiusEquator) / PlaneZNear;
     const zFar = 100;
     mat4.lookAt(lookAtMatrix, eye, lookAt, vec3.fromValues(0, 1, 0));
-    mat4.perspective(perspectiveMatrix, CONFIG.fieldOfView, aspect, zNear, zFar);
+    mat4.perspective(perspectiveMatrix, CONFIG.fieldOfView * Math.PI / 180, aspect, zNear, zFar);
     mat4.multiply(projectionMatrix, lookAtMatrix, projectionMatrix);
     mat4.multiply(projectionMatrix, perspectiveMatrix, projectionMatrix);
 
@@ -467,7 +466,7 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
         rotationMatrix, // matrix to rotate
         - CONFIG.eyeLat / (180 / Math.PI), // amount to rotate in radians
         [1, 0, 0]
-    ); // axis to rotate around (X)
+    ); // axis to rotate around (X) 
 
     mat4.rotate(
         rotationMatrix, // destination matrix
@@ -658,13 +657,13 @@ function loadTilesTexture(gl) {
     ctx.fillStyle = "#eee";
     ctx.fillRect(0, 0, hdcanvas.width, hdcanvas.height);
     ctx.strokeStyle = "#333";
-    for (var x = 0; x < hdcanvas.width; x += TileSize / 16) {
+    for (var x = 0; x < hdcanvas.width; x += TileSize / 8) {
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, hdcanvas.height);
         ctx.stroke();
     }
-    for (var y = 0; y < hdcanvas.height; y += TileSize / 16) {
+    for (var y = 0; y < hdcanvas.height; y += TileSize / 8) {
         ctx.beginPath();
         ctx.moveTo(0, y);
         ctx.lineTo(hdcanvas.width, y);
@@ -684,6 +683,7 @@ function loadTilesTexture(gl) {
     uploadTexture(gl, texture, hdcanvas, CONFIG.uploadedTexture ? 
             DELAY_TO_REPLACE_FRESH_TEXTURE : 0);
 
+    //if(true) return texture;
     for (var x = 0; x < TilesCanvasSize - 1; x++) {
         if (!(x + startX < maxTileId) ) {
             continue;
@@ -759,7 +759,6 @@ function addListeners() {
     registerSlider('rotLonSpeed', 'ROT LON:', 'sliderRotLonSpeed', 'sliderRotLonSpeedText');
     registerSlider('rotLatSpeed', 'ROT LAT:', 'sliderRotLatSpeed', 'sliderRotLatSpeedText');
 
-    
     let mouseCoords, mousedown = false;
     const canvas = document.querySelector("#glcanvas");
     function getClippedCoords(e) {
@@ -802,7 +801,7 @@ function addListeners() {
         const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.eyePosition / EarthRadiusEquator)) * 180 / Math.PI;
         eyeAngleText.value = "ANGLE: " + eyeAngle.value + ", " + (eyeAngle.value * lookAtAngleMax).toFixed(0) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
     }
-
+    
     const eyeZoom = document.getElementById("sliderEyePos");
     const eyeZoomText = document.getElementById("sliderEyePosText");
     
@@ -817,7 +816,6 @@ function addListeners() {
     function updateEyeZoomTxt() {
         eyeZoomText.value = "Zoom: " + CONFIG.eyeZoom.toFixed(2) + ", " + CONFIG.eyePosition.toFixed(CONFIG.eyePosition < 1 ? 2 : 1) + " km" ; 
         updateEyeAngleTxt();
-        syncZooms();
     }
 
     const syncZoom = document.getElementById("syncZoom");
@@ -834,17 +832,29 @@ function addListeners() {
         const y = getTileNumberY(z, CONFIG.eyeLat);
         let tileWidthKm = getDistance(getLatitudeFromTile(z, Math.floor(y)), getLongitudeFromTile(z, x), getLatitudeFromTile(z, Math.floor(y) + 1), 
             getLongitudeFromTile(z, x)) / 1000;
-        
-        let tilesToFitScreen = (GlCanvasSize / TileSize) * PlaneZNear;
+        let tilesToFitScreen = (GlCanvasSize / TileSize) ;
         let screenInKm = (tileWidthKm * getPowZoom(z - CONFIG.eyeZoom) * tilesToFitScreen);
-        CONFIG.eyePosition = (screenInKm / 2) / (Math.tan(CONFIG.fieldOfView)) * (1 + TileMagicPixelPerfect*z); 
-        // CONFIG.eyePosition = Math.pow(2, 4 - eyeZoom.value) * EarthRadiusEquator;
+        CONFIG.eyePosition = (screenInKm / 2) / (Math.tan(CONFIG.fieldOfView * Math.PI / 180 / 2)) ;
+        // CONFIG.eyePosition = Math.pow(2, 5 - CONFIG.eyeZoom) * 3800;
+        // CONFIG.eyePosition = Math.pow(2, 4 - CONFIG.eyeZoom) * EarthRadiusEquator;
+        syncZooms();
         updateEyeZoomTxt();
     }
 
     setCamZoomValue(CONFIG.eyeZoom);
     eyeZoom.addEventListener('input', function () {
         setCamZoomValue(parseFloat(eyeZoom.value));
+    });
+
+    const fieldOfView = document.getElementById('sliderFOVAngle');
+    const fieldOfViewText =document.getElementById('sliderFOVAngleText');
+    fieldOfView.value =  CONFIG.fieldOfView;
+    fieldOfViewText.value = 'FOV: ' + CONFIG.fieldOfView + '°';
+    fieldOfView.addEventListener('input', function () {
+        CONFIG.fieldOfView = fieldOfView.value;
+        setCamZoomValue(CONFIG.eyeZoom);
+        fieldOfViewText.value = 'FOV: ' + CONFIG.fieldOfView + '°';
+        CONFIG.updateBuffer = true;
     });
 
     canvas.addEventListener('wheel', (e) => {
@@ -855,6 +865,7 @@ function addListeners() {
     updateEyeAngleTxt();
     eyeAngle.addEventListener('input', function () {
         CONFIG.eyeAngle = eyeAngle.value;
+        // calculate
         updateEyeAngleTxt();
     });
 
