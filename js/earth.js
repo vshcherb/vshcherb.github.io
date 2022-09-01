@@ -1,10 +1,12 @@
+// TODO rotate around point on angle change
+// TODO device independent constant vs pixel-perfect
 // TODO autoload tiles on tilt / on pan
 // TODO autochange cam height on panning (different projection)
 // TODO holes between inequal tiles
 // TODO precise drag/drop movements 
 
 // ! OPENGL allows only texture power of 2 !
-const TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
+let TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
 let GlCanvasSize = 512; // < TilesCanvasSize * TileSize
 
 // Global CONSTANTS
