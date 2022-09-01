@@ -249,10 +249,8 @@ function initBuffers(gl) {
     let positions = [];
     let indices = []
     let textureCoordinates = [];
-    // TODO 1) tp ? 2) wh=wy=1 always 3) holes 
-    let queue = [{ x: cx, y: cy, z: z, wx: 1, wy: 1, tp: 3}];
+    let queue = [{ x: cx, y: cy, z: z, step: -1}];
     let qind = -1;
-    
     let polePos = [[], []];
     const texBBox = CONFIG.uploadedTextureMeta;
     while (++qind < queue.length) {
@@ -260,39 +258,34 @@ function initBuffers(gl) {
         if (tile.x < 0 || tile.y < 0 || tile.x >= (1 << tile.z) || tile.y >= (1 << tile.z)) {
             continue;
         }
-        // tile[4] - 0 [add full tile or split], 3, 1 (special case start) - add parents + (neighboors
-        if (tile.tp % 2 == 1) {
-            let nextx = tile.x + ((tile.x / tile.wx) % 2 == 1 ? -tile.wx : tile.wx);
-            let nexty = tile.y + ((tile.y / tile.wy) % 2 == 1 ? -tile.wy : tile.wy);
+        if (tile.step != 0) {
+            let nextx = tile.x + (tile.x  % 2 == 1 ? -1 : 1);
+            let nexty = tile.y + (tile.y % 2 == 1 ? -1 : 1);
             // add 3 neigbhours
-            queue.push({ x: tile.x, y: nexty, z: tile.z, wx: tile.wx, wy: tile.wy, tp: 0 });
-            queue.push({ x: nextx, y: tile.y, z: tile.z, wx: tile.wx, wy: tile.wy, tp: 0});
-            queue.push({ x: nextx,  y: nexty, z: tile.z, wx: tile.wx, wy: tile.wy, tp: 0});
+            queue.push({ x: tile.x, y: nexty, z: tile.z, step: 0 });
+            queue.push({ x: nextx, y: tile.y, z: tile.z, step: 0});
+            queue.push({ x: nextx, y: nexty, z: tile.z, step: 0});
             // add parent
-            queue.push({
-                x: Math.floor(nextx / (2 * tile.wx)) * tile.wx,
-                y: Math.floor(nexty / (2 * tile.wy)) * tile.wy,
-                z: tile.z - 1, wx: tile.wx, wy: tile.wy, tp: 1
-            });
-            if (tile.tp == 1) {
+            queue.push({x: Math.floor(nextx / 2), y: Math.floor(nexty / 2), z: tile.z - 1, step: 1});
+            if (tile.step == 1) {
                 // inner tiles already processed
                 continue;
             }
         } else if (tile.z < CONFIG.minVertexZoom
                || (tile.z < z && Math.abs((cx >> (z - tile.z)) - tile.x) <= CONFIG.vertexSpiral
                               && Math.abs((cy >> (z - tile.z)) - tile.y) <= CONFIG.vertexSpiral)) {
-            queue.push({ x: tile.x * 2, y: tile.y * 2, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
-            queue.push({ x: tile.x * 2 + 1, y: tile.y * 2, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
-            queue.push({ x: tile.x * 2, y: tile.y * 2 + 1, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
-            queue.push({ x: tile.x * 2 + 1, y: tile.y * 2 + 1, z: tile.z + 1, wx: tile.wx, wy: tile.wy, tp: 0 });
+            queue.push({ x: tile.x * 2, y: tile.y * 2, z: tile.z + 1, step: 0 });
+            queue.push({ x: tile.x * 2 + 1, y: tile.y * 2, z: tile.z + 1, step: 0 });
+            queue.push({ x: tile.x * 2, y: tile.y * 2 + 1, z: tile.z + 1, step: 0 });
+            queue.push({ x: tile.x * 2 + 1, y: tile.y * 2 + 1, z: tile.z + 1, step: 0 });
             continue;
         }
         
         // GEO: geolatitude = 90 - lat, geolongitude = lon - 180
         const latt = Math.PI / 2 - getLatitudeFromTile(tile.z, tile.y) / (180 / Math.PI);
-        const latb = Math.PI / 2 - getLatitudeFromTile(tile.z, tile.y + tile.wy) / (180 / Math.PI);
+        const latb = Math.PI / 2 - getLatitudeFromTile(tile.z, tile.y + 1) / (180 / Math.PI);
         const lonl = getLongitudeFromTile(tile.z, tile.x) / (180 / Math.PI) + Math.PI;
-        const lonr = getLongitudeFromTile(tile.z, tile.x + tile.wx) / (180 / Math.PI) + Math.PI;
+        const lonr = getLongitudeFromTile(tile.z, tile.x + 1) / (180 / Math.PI) + Math.PI;
         positions.push(Math.sin(lonl) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonl) * Math.sin(latt));
         positions.push(Math.sin(lonl) * Math.sin(latb), EarthSkew * Math.cos(latb), Math.cos(lonl) * Math.sin(latb));
         positions.push(Math.sin(lonr) * Math.sin(latt), EarthSkew * Math.cos(latt), Math.cos(lonr) * Math.sin(latt));
@@ -304,7 +297,7 @@ function initBuffers(gl) {
             polePos[0].push(positions[poslen - 6], positions[poslen - 5], positions[poslen - 4]);
             polePos[0].push(0, EarthSkew, 0);
         } 
-        if (tile.y + tile.wy == (1 << tile.z)) {
+        if (tile.y + 1 == (1 << tile.z)) {
             polePos[1].push(positions[poslen - 9], positions[poslen - 8], positions[poslen - 7]);
             polePos[1].push(positions[poslen - 3], positions[poslen - 2], positions[poslen - 1]);
             polePos[1].push(0, -EarthSkew, 0);
@@ -313,9 +306,9 @@ function initBuffers(gl) {
 
         
         let leftTex = (tile.x / getPowZoom(tile.z - texBBox.z) - texBBox.sx) / texBBox.w  + texStepX;
-        let rightTex = ((tile.x + tile.wx) / getPowZoom(tile.z - texBBox.z) - texBBox.sx) / texBBox.w + texStepX;
+        let rightTex = ((tile.x + 1) / getPowZoom(tile.z - texBBox.z) - texBBox.sx) / texBBox.w + texStepX;
         let topTex = ((tile.y) / getPowZoom(tile.z - texBBox.z) - texBBox.sy) / texBBox.h + texStepY;
-        let bottomTex = ((tile.y + tile.wy) / getPowZoom(tile.z - texBBox.z) - texBBox.sy) / texBBox.h + texStepY;
+        let bottomTex = ((tile.y + 1) / getPowZoom(tile.z - texBBox.z) - texBBox.sy) / texBBox.h + texStepY;
         if (leftTex < 0 || rightTex > 1 || topTex < 0 || bottomTex > 1) {
             leftTex = 0; rightTex = texStepX;
             topTex = 0; bottomTex = texStepY;
