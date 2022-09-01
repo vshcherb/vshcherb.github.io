@@ -1,14 +1,13 @@
-// Some constants
-// TODO autoload on tilt / on pan
+// TODO 3800
+// TODO autoload tiles on tilt / on pan
 // TODO problems with rotation when radius unequal
+// TODO holes between inequal tiles
+
+// Global CONSTANTS
 // const EarthRadiusEquator = 6378.137;
 const EarthRadiusEquator = 6356.752;
 const EarthRadiusPolar = 6356.752;
 const EarthSkew = EarthRadiusPolar / EarthRadiusEquator; // 0.997; // earth skew
-const TileSize = 256;
-const DenseVertices = 4;
-// ! OPENGL allows only texture power of 2 !
-const HiddenCanvasTiles = 7; // 7 // 3x3 - 768x768
 const MIN_LATITUDE = -85.0511;
 const MAX_LATITUDE = 85.0511;
 const LATITUDE_TURN = 180.0;
@@ -18,6 +17,12 @@ const LONGITUDE_TURN = 360.0;
 
 const DELAY_TO_REPLACE_FRESH_TEXTURE = 1000;
 const DELAY_TO_REPLACE_PARTIAL_TEXTURE = 250;
+
+// Tiles loading
+const TileURL = 'https://tile.openstreetmap.org';
+const TileSize = 256;
+// ! OPENGL allows only texture power of 2 !
+const TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
 
 const CONFIG = {
     loadTexture: true,
@@ -35,18 +40,15 @@ const CONFIG = {
     rotLonSpeed: 0,
 
     textureTilesZoom: 4,
-    textureTilesBbox: {sx: 0, sy: 0, w: HiddenCanvasTiles, h: HiddenCanvasTiles},
-    uploadedTextureMeta: { sx: 0, sy: 0, w: HiddenCanvasTiles, h: HiddenCanvasTiles, z: 4 },
+    textureTilesBbox: {sx: 0, sy: 0, w: TilesCanvasSize, h: TilesCanvasSize},
+    uploadedTextureMeta: { sx: 0, sy: 0, w: TilesCanvasSize, h: TilesCanvasSize, z: 4 },
     uploadedTexture: null,
     
     // global vertices rendering
-    minVertexZoom: 4,
+    minVertexZoom: 5,
     vertexSpiral: 2, // ?? related to HiddenCanvasTiles (so vertex zoom / tiles displayed enough)??
 
     vertexZoom: 5,
-    // defaultURL: 'https://tile.osmand.net/hd',
-    defaultURL: 'https://tile.openstreetmap.org',
-    
     drawMode: 'TRIANGLES',
     
     fieldOfView: (30 * Math.PI) / 180, // in radians
@@ -237,8 +239,8 @@ function initBuffers(gl) {
     }
     var vind = 0;
     var vertCount = 0;
-    const texStepX = 1 / (CONFIG.textureTilesBbox.w + 1);
-    const texStepY = 1 / (CONFIG.textureTilesBbox.h + 1);
+    const texStepX = 1 / CONFIG.textureTilesBbox.w;
+    const texStepY = 1 / CONFIG.textureTilesBbox.h;
     
     let cx = Math.floor(getTileNumberX(z, CONFIG.eyeLon));
     let cy = Math.floor(getTileNumberY(z, CONFIG.eyeLat));
@@ -310,10 +312,10 @@ function initBuffers(gl) {
         
 
         
-        let leftTex = (tile.x / getPowZoom(tile.z - texBBox.z) - texBBox.sx) / (texBBox.w + 1) + texStepX;
-        let rightTex = ((tile.x + tile.wx) / getPowZoom(tile.z - texBBox.z) - texBBox.sx) / (texBBox.w + 1) + texStepX;
-        let topTex = ((tile.y) / getPowZoom(tile.z - texBBox.z) - texBBox.sy) / (texBBox.h + 1) + texStepY;
-        let bottomTex = ((tile.y + tile.wy) / getPowZoom(tile.z - texBBox.z) - texBBox.sy) / (texBBox.h + 1) + texStepY;
+        let leftTex = (tile.x / getPowZoom(tile.z - texBBox.z) - texBBox.sx) / texBBox.w  + texStepX;
+        let rightTex = ((tile.x + tile.wx) / getPowZoom(tile.z - texBBox.z) - texBBox.sx) / texBBox.w + texStepX;
+        let topTex = ((tile.y) / getPowZoom(tile.z - texBBox.z) - texBBox.sy) / texBBox.h + texStepY;
+        let bottomTex = ((tile.y + tile.wy) / getPowZoom(tile.z - texBBox.z) - texBBox.sy) / texBBox.h + texStepY;
         if (leftTex < 0 || rightTex > 1 || topTex < 0 || bottomTex > 1) {
             leftTex = 0; rightTex = texStepX;
             topTex = 0; bottomTex = texStepY;
@@ -633,9 +635,9 @@ function uploadTexture(gl, texture, hdcanvas, delay) {
 function loadTilesTexture(gl) {
     const texture = gl.createTexture();
     const hdcanvas = document.querySelector("#hiddencanvas");
-    hdcanvas.width = (HiddenCanvasTiles + 1) * TileSize;
+    hdcanvas.width = TilesCanvasSize * TileSize;
     // reserve 1st row for empty tiles
-    hdcanvas.height = (HiddenCanvasTiles + 1) * TileSize;
+    hdcanvas.height = TilesCanvasSize * TileSize;
     const ctx = hdcanvas.getContext("2d");
     ctx.beginPath();
     ctx.fillStyle = "#eee";
@@ -660,18 +662,18 @@ function loadTilesTexture(gl) {
     const zoom = CONFIG.textureTilesZoom;
     const maxTileId = 1 << CONFIG.textureTilesZoom;
     
-    const startX = Math.max(0, Math.floor(getTileNumberX(zoom, CONFIG.eyeLon) - HiddenCanvasTiles / 2));
-    const startY = Math.max(0, Math.floor(getTileNumberY(zoom, CONFIG.eyeLat) - HiddenCanvasTiles / 2));
+    const startX = Math.max(0, Math.floor(getTileNumberX(zoom, CONFIG.eyeLon) - TilesCanvasSize / 2));
+    const startY = Math.max(0, Math.floor(getTileNumberY(zoom, CONFIG.eyeLat) - TilesCanvasSize / 2));
     CONFIG.textureTilesBbox.sx = startX;
     CONFIG.textureTilesBbox.sy = startY;
     uploadTexture(gl, texture, hdcanvas, CONFIG.uploadedTexture ? 
             DELAY_TO_REPLACE_FRESH_TEXTURE : 0);
 
-    for (var x = 0; x < HiddenCanvasTiles; x++) {
+    for (var x = 0; x < TilesCanvasSize - 1; x++) {
         if (!(x + startX < maxTileId) ) {
             continue;
         }
-        for (var y = 0; y < HiddenCanvasTiles; y++) {
+        for (var y = 0; y < TilesCanvasSize - 1; y++) {
             if (!(y + startY < maxTileId)) {
                 continue;
             }   
@@ -686,7 +688,7 @@ function loadTilesTexture(gl) {
                 }
             };
             image.crossOrigin = "anonymous";
-            image.src = CONFIG.defaultURL + "/" + zoom + "/" + 
+            image.src = TileURL + "/" + zoom + "/" + 
                 (x + startX) + "/" +  (y + startY) + ".png";
         }
     }   
