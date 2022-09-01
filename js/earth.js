@@ -5,7 +5,7 @@
 
 // ! OPENGL allows only texture power of 2 !
 const TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
-let GlCanvasSize = 1024; // < TilesCanvasSize * TileSize
+let GlCanvasSize = 512; // < TilesCanvasSize * TileSize
 
 // Global CONSTANTS
 // TODO Ellipse earth: 1) getDistance 2) problem with rotation (camera height)
@@ -148,7 +148,7 @@ function getPowZoom(zoom) {
 
 // Start here
 function main() {
-    GlCanvasSize = Math.min(document.body.clientWidth / 2, 512);
+    GlCanvasSize = document.body.clientWidth / 2 > 1024 ? 1024 : 512
     const canvas = document.querySelector("#glcanvas");
     canvas.width = GlCanvasSize;
     canvas.height = GlCanvasSize;
