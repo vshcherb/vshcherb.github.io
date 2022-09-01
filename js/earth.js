@@ -1,13 +1,16 @@
 // TODO rotate around point on angle change
+
 // TODO device independent constant vs pixel-perfect
+// TODO proper tile scale
 // TODO autoload tiles on tilt / on pan
 // TODO autochange cam height on panning (different projection)
-// TODO holes between inequal tiles
 // TODO precise drag/drop movements 
+// TODO holes between inequal tiles
 
 // ! OPENGL allows only texture power of 2 !
 let TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
-let GlCanvasSize = 512; // < TilesCanvasSize * TileSize
+// let GlCanvasSize = 1024; // < TilesCanvasSize * TileSize
+let GlCanvasSize = 768;
 
 // Global CONSTANTS
 // TODO Ellipse earth: 1) getDistance 2) problem with rotation (camera height)
@@ -27,6 +30,9 @@ const DELAY_TO_REPLACE_PARTIAL_TEXTURE = 250;
 
 // Tiles loading
 const TileURL = 'https://tile.openstreetmap.org';
+const TileExtension = '.png';
+// const TileURL = 'tiles';
+// const TileExtension = '.png.tile';
 const TileMinZoom = 1;
 const TileMaxZoom = 18;
 const TileSize = 256;
@@ -41,12 +47,17 @@ const CONFIG = {
     syncZoom: true,
     tilesOnAndGridOff: true,
 
-    eyePosition: 20000, // insync with eyeZoom
-    eyeZoom : 2.5,
+    cameraHeight: 20000, // insync with eyeZoom
+    cameraZoom : 2.5,
 
-    eyeAngle: 0,
-    eyeLat: 52.37313,
-    eyeLon: 4.89875,
+    cameraAngle: 0,
+    cameraLat: 52.37313,
+    cameraLon: 4.89875,
+
+    targetLat: 0,
+    targetLon: 0,
+    targetDist: 0,
+    
     rotLatSpeed: 0,
     rotLatDir: 1,
     rotLonSpeed: 0,
@@ -57,7 +68,7 @@ const CONFIG = {
     uploadedTexture: null,
     
     // global vertices rendering
-    minVertexZoom: 5,
+    minVertexZoom: 6,
     vertexSpiral: 2, // ?? related to TilesCanvasSize GlCanvasSize (so vertex zoom / tiles displayed enough)??
 
     vertexZoom: 5,
@@ -150,7 +161,7 @@ function getPowZoom(zoom) {
 
 // Start here
 function main() {
-    GlCanvasSize = document.body.clientWidth / 2 > 1024 ? 1024 : 512
+    // GlCanvasSize = document.body.clientWidth / 2 > 1024 ? 1024 : 512ж
     const canvas = document.querySelector("#glcanvas");
     canvas.width = GlCanvasSize;
     canvas.height = GlCanvasSize;
@@ -265,8 +276,8 @@ function initBuffers(gl) {
     const texStepX = 1 / CONFIG.textureTilesBbox.w;
     const texStepY = 1 / CONFIG.textureTilesBbox.h;
     
-    let cx = Math.floor(getTileNumberX(z, CONFIG.eyeLon));
-    let cy = Math.floor(getTileNumberY(z, CONFIG.eyeLat));
+    let cx = Math.floor(getTileNumberX(z, CONFIG.cameraLon));
+    let cy = Math.floor(getTileNumberY(z, CONFIG.cameraLat));
     // Now create an array of positions for the cube.
     let colors = [];
     let positions = [];
@@ -430,15 +441,15 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     // note: glmatrix.js always has the first argument
     // as the destination to receive the result.
    // mat4.perspective(projectionMatrix, fieldOfView, aspect, zNear, zFar);
-    const eye = vec3.fromValues(0, 0, - 1 - (CONFIG.eyePosition / EarthRadiusEquator));
+    const eye = vec3.fromValues(0, 0, - 1 - (CONFIG.cameraHeight / EarthRadiusEquator));
     
-    const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.eyePosition / EarthRadiusEquator));
-    const lookAt = vec3.fromValues(0, Math.tan(CONFIG.eyeAngle * lookAtAngleMax) * (EarthSkew + CONFIG.eyePosition / EarthRadiusPolar) , 0);
+    const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.cameraHeight / EarthRadiusEquator));
+    const lookAt = vec3.fromValues(0, Math.tan(CONFIG.cameraAngle * lookAtAngleMax) * (EarthSkew + CONFIG.cameraHeight / EarthRadiusPolar) , 0);
     const lookAtMatrix = mat4.create();
     const perspectiveMatrix = mat4.create();
     
     // recalculate dynamically
-    const zNear = (CONFIG.eyePosition / EarthRadiusEquator) / PlaneZNear;
+    const zNear = (CONFIG.cameraHeight / EarthRadiusEquator) / PlaneZNear;
     const zFar = 100;
     mat4.lookAt(lookAtMatrix, eye, lookAt, vec3.fromValues(0, 1, 0));
     mat4.perspective(perspectiveMatrix, CONFIG.fieldOfView * Math.PI / 180, aspect, zNear, zFar);
@@ -446,34 +457,34 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
     mat4.multiply(projectionMatrix, perspectiveMatrix, projectionMatrix);
 
     const rotationMatrix = mat4.create();
-    const zoomRotCoeef = CONFIG.eyePosition / 8000;
-    CONFIG.eyeLon += deltaTime * CONFIG.rotLonSpeed * zoomRotCoeef;
-    if (CONFIG.eyeLon > 180) {
-        CONFIG.eyeLon -= 360;
+    const zoomRotCoeef = CONFIG.cameraHeight / 8000;
+    CONFIG.cameraLon += deltaTime * CONFIG.rotLonSpeed * zoomRotCoeef;
+    if (CONFIG.cameraLon > 180) {
+        CONFIG.cameraLon -= 360;
     }
-    CONFIG.eyeLat += CONFIG.rotLatDir * deltaTime * CONFIG.rotLatSpeed * zoomRotCoeef;
+    CONFIG.cameraLat += CONFIG.rotLatDir * deltaTime * CONFIG.rotLatSpeed * zoomRotCoeef;
     if (CONFIG.rotLatSpeed > 0 || CONFIG.rotLonSpeed > 0) {
-        updateText();
+        updateCameraPosText();
     }
-    if (CONFIG.eyeLat >= 90) {
-        CONFIG.eyeLat = 90;
+    if (CONFIG.cameraLat >= 90) {
+        CONFIG.cameraLat = 90;
         CONFIG.rotLatDir = -1;
     }
-    if (CONFIG.eyeLat <= -90) {
-        CONFIG.eyeLat = -90;
+    if (CONFIG.cameraLat <= -90) {
+        CONFIG.cameraLat = -90;
         CONFIG.rotLatDir = 1;
     }
     mat4.rotate(
         rotationMatrix, // destination matrix
         rotationMatrix, // matrix to rotate
-        - CONFIG.eyeLat / (180 / Math.PI), // amount to rotate in radians
+        - CONFIG.cameraLat / (180 / Math.PI), // amount to rotate in radians
         [1, 0, 0]
     ); // axis to rotate around (X) 
 
     mat4.rotate(
         rotationMatrix, // destination matrix
         rotationMatrix, // matrix to rotate
-        - CONFIG.eyeLon / (180 / Math.PI), // amount to rotate in radians
+        - CONFIG.cameraLon / (180 / Math.PI), // amount to rotate in radians
         [0, 1, 0]
     ); // axis to rotate around (Z)
 
@@ -678,8 +689,8 @@ function loadTilesTexture(gl) {
     const zoom = CONFIG.textureTilesZoom;
     const maxTileId = 1 << CONFIG.textureTilesZoom;
     
-    const startX = Math.max(0, Math.floor(getTileNumberX(zoom, CONFIG.eyeLon) - TilesCanvasSize / 2));
-    const startY = Math.max(0, Math.floor(getTileNumberY(zoom, CONFIG.eyeLat) - TilesCanvasSize / 2));
+    const startX = Math.max(0, Math.floor(getTileNumberX(zoom, CONFIG.cameraLon) - TilesCanvasSize / 2));
+    const startY = Math.max(0, Math.floor(getTileNumberY(zoom, CONFIG.cameraLat) - TilesCanvasSize / 2));
     CONFIG.textureTilesBbox.sx = startX;
     CONFIG.textureTilesBbox.sy = startY;
     uploadTexture(gl, texture, hdcanvas, CONFIG.uploadedTexture ? 
@@ -706,7 +717,7 @@ function loadTilesTexture(gl) {
             };
             image.crossOrigin = "anonymous";
             image.src = TileURL + "/" + zoom + "/" + 
-                (x + startX) + "/" +  (y + startY) + ".png";
+                (x + startX) + "/" +  (y + startY) + TileExtension;
         }
     }   
     return texture;
@@ -716,11 +727,11 @@ function isPowerOf2(value) {
     return (value & (value - 1)) == 0;
 }
 
-function updateText() {
+function updateCameraPosText() {
     var latText = document.getElementById('latText');
     var lonText = document.getElementById('lonText');
-    latText.value = 'LAT: ' + CONFIG.eyeLat.toFixed(5);
-    lonText.value = 'LON: ' + CONFIG.eyeLon.toFixed(5);
+    latText.value = 'LAT: ' + CONFIG.cameraLat.toFixed(5);
+    lonText.value = 'LON: ' + CONFIG.cameraLon.toFixed(5);
 }
 
 function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
@@ -744,6 +755,15 @@ function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
             updateValue();
         }
     };
+}
+
+function updateTargetTxt() {
+    CONFIG.targetLat = CONFIG.cameraLat;
+    CONFIG.targetLon = CONFIG.cameraLon;
+    CONFIG.targetDist = CONFIG.cameraHeight;
+    document.getElementById("targetLatText").value = "LAT " + CONFIG.targetLat.toFixed(5);
+    document.getElementById("targetLonText").value = "LON " + CONFIG.targetLon.toFixed(5);
+    document.getElementById("targetDistText").value = "DIST " + (CONFIG.targetDist).toFixed(2) + " km" ;
 }
 
 function addListeners() {
@@ -782,13 +802,15 @@ function addListeners() {
     canvas.addEventListener('mousemove', (e) => {
         if (mousedown) {
             let newCoords = getClippedCoords(e);
-            CONFIG.eyeLat += (mouseCoords[1] - newCoords[1]) * CONFIG.eyePosition / 400;
-            CONFIG.eyeLon += (mouseCoords[0] - newCoords[0]) * CONFIG.eyePosition / 400; 
-            updateText();
+            CONFIG.cameraLat += (mouseCoords[1] - newCoords[1]) * CONFIG.cameraHeight / 400;
+            CONFIG.cameraLon += (mouseCoords[0] - newCoords[0]) * CONFIG.cameraHeight / 400; 
+            updateCameraPosText();
+            updateTargetTxt();
             mouseCoords = newCoords;
         }
     });
-    CONFIG.vertexSpiral
+    
+    
 
     registerSlider('minVertexZoom', 'Min Vertex Zoom:', 'sliderMinVertexZoom', 'sliderMinVertexZoomText', 'updateBuffer');
     registerSlider('vertexSpiral', 'Vertex Details Zoom:', 'sliderVertexSpiral', 'sliderVertexSpiralText', 'updateBuffer');
@@ -796,57 +818,63 @@ function addListeners() {
     const setVertexZoom = registerSlider('vertexZoom', 'Vertex Zoom:', 'sliderVertexZoom', 'sliderVertexZoomText', 'updateBuffer');
     const setTextureTilesZoom = registerSlider('textureTilesZoom', 'Tiles Zoom:', 'sliderTextureZoom', 'sliderTextureZoomText', 'loadTexture');
     
-    const eyeAngle = document.getElementById("sliderEyeAngle");
-    const eyeAngleText = document.getElementById("sliderEyeAngleText");
-    
-    function updateEyeAngleTxt() {
-        const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.eyePosition / EarthRadiusEquator)) * 180 / Math.PI;
-        eyeAngleText.value = "ANGLE: " + eyeAngle.value + ", " + (eyeAngle.value * lookAtAngleMax).toFixed(0) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
+    /// CAMERA RECALCUALATION
+    const camAngle = document.getElementById("sliderEyeAngle");
+    const camAngleText = document.getElementById("sliderEyeAngleText");
+    const camZoom = document.getElementById("sliderEyePos");
+    const camZoomText = document.getElementById("sliderEyePosText");
+
+    function updateCamZoomAngleTxt() {
+        camZoomText.value = "Zoom: " + CONFIG.cameraZoom.toFixed(2) + ", " + CONFIG.cameraHeight.toFixed(CONFIG.cameraHeight < 1 ? 2 : 1) + " km" ; 
+        const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.cameraHeight / EarthRadiusEquator)) * 180 / Math.PI;
+        camAngleText.value = "ANGLE: " + camAngle.value + ", " + (camAngle.value * lookAtAngleMax).toFixed(0) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
+        updateTargetTxt();
     }
-    
-    const eyeZoom = document.getElementById("sliderEyePos");
-    const eyeZoomText = document.getElementById("sliderEyePosText");
-    
+
+    const syncZoom = document.getElementById("syncZoom");
     function syncZooms() {
         if (CONFIG.syncZoom) {
-            const text = Math.max(Math.max(TileMinZoom, 2), Math.min(Math.floor(CONFIG.eyeZoom), TileMaxZoom));
+            const text = Math.max(Math.max(TileMinZoom, 2), Math.min(Math.floor(CONFIG.cameraZoom), TileMaxZoom));
             setVertexZoom(Math.max(text + 1, CONFIG.minVertexZoom));
             setTextureTilesZoom(text);
         }
     }
-
-    function updateEyeZoomTxt() {
-        eyeZoomText.value = "Zoom: " + CONFIG.eyeZoom.toFixed(2) + ", " + CONFIG.eyePosition.toFixed(CONFIG.eyePosition < 1 ? 2 : 1) + " km" ; 
-        updateEyeAngleTxt();
-    }
-
-    const syncZoom = document.getElementById("syncZoom");
     syncZoom.addEventListener('change', function () {
         CONFIG.syncZoom = this.checked;
         syncZooms();
     });
 
     function setCamZoomValue(vl) {
-        CONFIG.eyeZoom = vl;
-        eyeZoom.value = CONFIG.eyeZoom;
-        let z = Math.max(2, Math.floor(CONFIG.eyeZoom));
-        const x = getTileNumberX(z, CONFIG.eyeLon);
-        const y = getTileNumberY(z, CONFIG.eyeLat);
+        CONFIG.cameraZoom = vl;
+        camZoom.value = CONFIG.cameraZoom;
+        let z = Math.max(2, Math.floor(CONFIG.cameraZoom));
+        const x = getTileNumberX(z, CONFIG.cameraLon);
+        const y = getTileNumberY(z, CONFIG.cameraLat);
         let tileWidthKm = getDistance(getLatitudeFromTile(z, Math.floor(y)), getLongitudeFromTile(z, x), getLatitudeFromTile(z, Math.floor(y) + 1), 
             getLongitudeFromTile(z, x)) / 1000;
         let tilesToFitScreen = (GlCanvasSize / TileSize) ;
-        let screenInKm = (tileWidthKm * getPowZoom(z - CONFIG.eyeZoom) * tilesToFitScreen);
-        CONFIG.eyePosition = (screenInKm / 2) / (Math.tan(CONFIG.fieldOfView * Math.PI / 180 / 2)) ;
+        let screenInKm = (tileWidthKm * getPowZoom(z - CONFIG.cameraZoom) * tilesToFitScreen);
+        CONFIG.cameraHeight = (screenInKm / 2) / (Math.tan(CONFIG.fieldOfView * Math.PI / 180 / 2)) ;
         // CONFIG.eyePosition = Math.pow(2, 5 - CONFIG.eyeZoom) * 3800;
         // CONFIG.eyePosition = Math.pow(2, 4 - CONFIG.eyeZoom) * EarthRadiusEquator;
         syncZooms();
-        updateEyeZoomTxt();
+        updateCamZoomAngleTxt();
     }
 
-    setCamZoomValue(CONFIG.eyeZoom);
-    eyeZoom.addEventListener('input', function () {
-        setCamZoomValue(parseFloat(eyeZoom.value));
+    setCamZoomValue(CONFIG.cameraZoom);
+    camZoom.addEventListener('input', function () {
+        setCamZoomValue(parseFloat(camZoom.value));
     });
+    canvas.addEventListener('wheel', (e) => {
+        const delta = -(0.05 * Math.floor(e.deltaY / 4));
+        setCamZoomValue(Math.max(0, Math.min(22, CONFIG.cameraZoom + delta)));
+    });
+    camAngle.addEventListener('input', function () {
+        CONFIG.cameraAngle = camAngle.value;
+        // recalculate lat / lon / distance to keep center in same place
+        updateCamZoomAngleTxt();
+    });
+
 
     const fieldOfView = document.getElementById('sliderFOVAngle');
     const fieldOfViewText =document.getElementById('sliderFOVAngleText');
@@ -854,25 +882,14 @@ function addListeners() {
     fieldOfViewText.value = 'FOV: ' + CONFIG.fieldOfView + '°';
     fieldOfView.addEventListener('input', function () {
         CONFIG.fieldOfView = fieldOfView.value;
-        setCamZoomValue(CONFIG.eyeZoom);
+        setCamZoomValue(CONFIG.cameraZoom);
         fieldOfViewText.value = 'FOV: ' + CONFIG.fieldOfView + '°';
         CONFIG.updateBuffer = true;
     });
 
-    canvas.addEventListener('wheel', (e) => {
-        const delta = -(0.05 * Math.floor(e.deltaY / 4));
-        setCamZoomValue(Math.max(0, Math.min(22, CONFIG.eyeZoom + delta)));
-    });
-
-    updateEyeAngleTxt();
-    eyeAngle.addEventListener('input', function () {
-        CONFIG.eyeAngle = eyeAngle.value;
-        // calculate
-        updateEyeAngleTxt();
-    });
 
     
     
-    updateText();
+    updateCameraPosText();
 
 }
