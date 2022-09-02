@@ -78,6 +78,7 @@ const CONFIG = {
 };
 
 main();
+addListeners();
 
 // input: h in [0,360] and s,v in [0,1] - output: r,g,b in [0,1]
 function hsv2rgb(h, s, v, a) {
@@ -227,7 +228,6 @@ function main() {
             uTexture: gl.getUniformLocation(shaderProgram, "uTexture"),
         },
     };
-    addListeners();
     // Here's where we call the routine that builds all the
     // objects we'll be drawing.
     var buffers = initBuffers(gl);
@@ -696,6 +696,7 @@ function loadTilesTexture(gl) {
     uploadTexture(gl, texture, hdcanvas, CONFIG.uploadedTexture ? 
             DELAY_TO_REPLACE_FRESH_TEXTURE : 0);
 
+    // don't load
     //if(true) return texture;
     for (var x = 0; x < TilesCanvasSize - 1; x++) {
         if (!(x + startX < maxTileId) ) {
@@ -758,9 +759,26 @@ function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
 }
 
 function updateTargetTxt() {
-    CONFIG.targetLat = CONFIG.cameraLat;
+    const lookAtAngleMax = Math.asin(EarthRadiusEquator / (EarthRadiusEquator + CONFIG.cameraHeight)) ;
+    const camAngle = Math.min(1, CONFIG.cameraAngle) * lookAtAngleMax;
+
+    // 1) cos(targetDiff) * Rad + cos(camAngle) * targetDist = camHeight + Rad
+    // 2) sin(targetDiff) * Rad = sin(camAngle) * targetDist
+    // 3) sin(camAngle + targetDiff) * Rad = sin(camAngle) * (Rad + camHeight)
+    // RESULT
+    CONFIG.targetLat = (Math.asin(Math.sin(camAngle) / EarthRadiusEquator * (CONFIG.cameraHeight + EarthRadiusEquator)) - 
+                        camAngle) / Math.PI * 180 + CONFIG.cameraLat;
+    const targetDiff = (CONFIG.targetLat - CONFIG.cameraLat) / 180 * Math.PI;
+    // targetDist = (camHeight + Rad) * tan(targetDiff) / (sin(camAngle) + cos(camAngle) * tan(targetDiff))
+    if (Math.abs(targetDiff) < 0.00001) {
+        // limit if targetDiff -> 0
+        CONFIG.targetDist = CONFIG.cameraHeight; 
+    } else {
+        CONFIG.targetDist = Math.tan(targetDiff) *
+                (CONFIG.cameraHeight + EarthRadiusEquator) / (Math.sin(camAngle) + Math.cos(camAngle) * Math.tan(targetDiff))
+    }
     CONFIG.targetLon = CONFIG.cameraLon;
-    CONFIG.targetDist = CONFIG.cameraHeight;
+    
     document.getElementById("targetLatText").value = "LAT " + CONFIG.targetLat.toFixed(5);
     document.getElementById("targetLonText").value = "LON " + CONFIG.targetLon.toFixed(5);
     document.getElementById("targetDistText").value = "DIST " + (CONFIG.targetDist).toFixed(2) + " km" ;
