@@ -8,9 +8,11 @@
 // TODO holes between inequal tiles
 
 // ! OPENGL allows only texture power of 2 !
-let TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
+const TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
 // let GlCanvasSize = 1024; // < TilesCanvasSize * TileSize
-let GlCanvasSize = 768;
+const GlCanvasSize = 768;
+
+const RotateAroundCenter = true;
 
 // Global CONSTANTS
 // TODO Ellipse earth: 1) getDistance 2) problem with rotation (camera height)
@@ -443,8 +445,9 @@ function drawScene(gl, programInfo, buffers, deltaTime, texture) {
    // mat4.perspective(projectionMatrix, fieldOfView, aspect, zNear, zFar);
     const eye = vec3.fromValues(0, 0, - 1 - (CONFIG.cameraHeight / EarthRadiusEquator));
     
-    const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.cameraHeight / EarthRadiusEquator));
-    const lookAt = vec3.fromValues(0, Math.tan(CONFIG.cameraAngle * lookAtAngleMax) * (EarthSkew + CONFIG.cameraHeight / EarthRadiusPolar) , 0);
+    // const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.cameraHeight / EarthRadiusEquator));
+    // const lookAt = vec3.fromValues(0, Math.tan(CONFIG.cameraAngle * lookAtAngleMax) * (EarthSkew + CONFIG.cameraHeight / EarthRadiusPolar) , 0);
+    const lookAt = vec3.fromValues(0, Math.tan(CONFIG.cameraAngle / 180 * Math.PI) * (EarthSkew + CONFIG.cameraHeight / EarthRadiusPolar), 0);
     const lookAtMatrix = mat4.create();
     const perspectiveMatrix = mat4.create();
     
@@ -759,8 +762,9 @@ function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
 }
 
 function updateTargetTxt() {
-    const lookAtAngleMax = Math.asin(EarthRadiusEquator / (EarthRadiusEquator + CONFIG.cameraHeight)) ;
-    const camAngle = Math.min(1, CONFIG.cameraAngle) * lookAtAngleMax;
+    // const lookAtAngleMax = Math.asin(EarthRadiusEquator / (EarthRadiusEquator + CONFIG.cameraHeight)) ;
+    // const camAngle = Math.min(1, CONFIG.cameraAngle) * lookAtAngleMax;
+    const camAngle = CONFIG.cameraAngle / 180 * Math.PI;
 
     // 1) cos(targetDiff) * Rad + cos(camAngle) * targetDist = camHeight + Rad
     // 2) sin(targetDiff) * Rad = sin(camAngle) * targetDist
@@ -770,7 +774,7 @@ function updateTargetTxt() {
                         camAngle) / Math.PI * 180 + CONFIG.cameraLat;
     const targetDiff = (CONFIG.targetLat - CONFIG.cameraLat) / 180 * Math.PI;
     // targetDist = (camHeight + Rad) * tan(targetDiff) / (sin(camAngle) + cos(camAngle) * tan(targetDiff))
-    if (Math.abs(targetDiff) < 0.00001) {
+    if (Math.abs(targetDiff) < 0.000001) {
         // limit if targetDiff -> 0
         CONFIG.targetDist = CONFIG.cameraHeight; 
     } else {
@@ -781,7 +785,13 @@ function updateTargetTxt() {
     
     document.getElementById("targetLatText").value = "LAT " + CONFIG.targetLat.toFixed(5);
     document.getElementById("targetLonText").value = "LON " + CONFIG.targetLon.toFixed(5);
-    document.getElementById("targetDistText").value = "DIST " + (CONFIG.targetDist).toFixed(2) + " km" ;
+    document.getElementById("targetDistText").value = "DIST " + (CONFIG.targetDist).toFixed(4) + " km" ;
+
+    const z = (CONFIG.textureTilesZoom ? CONFIG.textureTilesZoom : 2);
+    document.getElementById("targetTileZoomText").value = "Z " + z;
+    document.getElementById("targetTileXText").value = "X " + getTileNumberX(z, CONFIG.targetLon).toFixed(2);
+    document.getElementById("targetTileYText").value = "Y " + getTileNumberY(z, CONFIG.targetLat).toFixed(2);
+
 }
 
 function addListeners() {
@@ -843,10 +853,10 @@ function addListeners() {
     const camZoomText = document.getElementById("sliderEyePosText");
 
     function updateCamZoomAngleTxt() {
-        camZoomText.value = "Zoom: " + CONFIG.cameraZoom.toFixed(2) + ", " + CONFIG.cameraHeight.toFixed(CONFIG.cameraHeight < 1 ? 2 : 1) + " km" ; 
+        camZoomText.value = "Zoom: " + CONFIG.cameraZoom.toFixed(2) + ", " + CONFIG.cameraHeight.toFixed(CONFIG.cameraHeight < 1 ? 3 : 3) + " km" ; 
         const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.cameraHeight / EarthRadiusEquator)) * 180 / Math.PI;
-        camAngleText.value = "ANGLE: " + camAngle.value + ", " + (camAngle.value * lookAtAngleMax).toFixed(0) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
-        updateTargetTxt();
+        // camAngleText.value = "ANGLE: " + camAngle.value + ", " + (camAngle.value *  lookAtAngleMax).toFixed(1) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
+        camAngleText.value = "ANGLE: " + camAngle.value + ", " + CONFIG.cameraAngle.toFixed(1) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
     }
 
     const syncZoom = document.getElementById("syncZoom");
@@ -877,6 +887,7 @@ function addListeners() {
         // CONFIG.eyePosition = Math.pow(2, 4 - CONFIG.eyeZoom) * EarthRadiusEquator;
         syncZooms();
         updateCamZoomAngleTxt();
+        updateTargetTxt();
     }
 
     setCamZoomValue(CONFIG.cameraZoom);
@@ -888,9 +899,27 @@ function addListeners() {
         setCamZoomValue(Math.max(0, Math.min(22, CONFIG.cameraZoom + delta)));
     });
     camAngle.addEventListener('input', function () {
-        CONFIG.cameraAngle = camAngle.value;
+        const lookAtAngleMax = Math.asin(EarthRadiusEquator / (EarthRadiusEquator + CONFIG.cameraHeight));
+        CONFIG.cameraAngle = Math.min(camAngle.value, lookAtAngleMax * 180 / Math.PI - 0.1);    
+        if (RotateAroundCenter) {
+            // rotate around center point
+            // const camAngle = Math.min(1, CONFIG.cameraAngle) * lookAtAngleMax;
+            const camAngle = CONFIG.cameraAngle / 180 * Math.PI;
+            // 1) cos(targetDiff) * Rad + cos(camAngle) * targetDist = camHeight + Rad
+            // 2) sin(targetDiff) * Rad = sin(camAngle) * targetDist
+            // 3) sin(camAngle + targetDiff) * Rad = sin(camAngle) * (Rad + camHeight)
+            // step back to look at targetLat
+            const targetDiff = Math.asin(Math.sin(camAngle) * (CONFIG.targetDist / EarthRadiusEquator));
+            CONFIG.cameraLat = CONFIG.targetLat - targetDiff * 180 / Math.PI;
+            CONFIG.cameraHeight = CONFIG.targetDist * Math.cos(camAngle)
+                    + EarthRadiusEquator * (Math.cos(targetDiff) - 1);
+        }
         // recalculate lat / lon / distance to keep center in same place
+        updateCameraPosText();
         updateCamZoomAngleTxt();
+        // accumulates error on critical angles
+        updateTargetTxt();
+
     });
 
 
