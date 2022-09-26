@@ -791,6 +791,9 @@ function updateTargetTxt() {
     document.getElementById("targetTileZoomText").value = "Z " + z;
     document.getElementById("targetTileXText").value = "X " + getTileNumberX(z, CONFIG.targetLon).toFixed(2);
     document.getElementById("targetTileYText").value = "Y " + getTileNumberY(z, CONFIG.targetLat).toFixed(2);
+    document.getElementById("targetProjDistText").value = "ON GLOBE " + (getDistance(CONFIG.targetLat, CONFIG.targetLon, 
+        CONFIG.cameraLat, CONFIG.cameraLon) / 1000).toFixed(3) + " km";
+    
 
 }
 
