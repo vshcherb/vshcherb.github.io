@@ -1,11 +1,13 @@
-// TODO rotate around point on angle change
+// +   TODO device independent constant vs pixel-perfect
+// +   TODO proper tile scale
+// + ? TODO autochange cam height on panning (different projection)
 
-// TODO device independent constant vs pixel-perfect
-// TODO proper tile scale
-// TODO autoload tiles on tilt / on pan
-// TODO autochange cam height on panning (different projection)
 // TODO precise drag/drop movements 
-// TODO holes between inequal tiles
+// TODO Hangs around poles
+// TODO autoload tiles on tilt / on pan
+
+// TODO Ellipse earth: 1) getDistance 2) problem with rotation (camera height)
+// TODO holes between inequal tiles (should be rectangular network)
 
 // ! OPENGL allows only texture power of 2 !
 const TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
@@ -15,7 +17,6 @@ const GlCanvasSize = 768;
 const RotateAroundCenter = true;
 
 // Global CONSTANTS
-// TODO Ellipse earth: 1) getDistance 2) problem with rotation (camera height)
 // const EarthRadiusEquator = 6378.137;
 const EarthRadiusEquator = 6356.752;
 const EarthRadiusPolar = 6356.752;
@@ -693,8 +694,8 @@ function loadTilesTexture(gl) {
     const maxTileId = 1 << CONFIG.textureTilesZoom;
     
     // cameraLon, cameraLat
-    const startX = Math.max(0, Math.round(getTileNumberX(zoom, CONFIG.targetLon) - TilesCanvasSize / 2));
-    const startY = Math.max(0, Math.round(getTileNumberY(zoom, CONFIG.targetLat) - TilesCanvasSize / 2));
+    const startX = Math.max(0, Math.round(getTileNumberX(zoom, CONFIG.targetLon) - (TilesCanvasSize - 1) / 2 ));
+    const startY = Math.max(0, Math.round(getTileNumberY(zoom, CONFIG.targetLat) - (TilesCanvasSize - 1) / 2 ));
     CONFIG.textureTilesBbox.sx = startX;
     CONFIG.textureTilesBbox.sy = startY;
     uploadTexture(gl, texture, hdcanvas, CONFIG.uploadedTexture ? 
@@ -762,20 +763,74 @@ function registerSlider(idParam, uiPrefix, idInput, idLabel, flagParam) {
     };
 }
 
-function updateTargetLoc() {
+
+function findPixelPerfectCameraHeightForZoom(zoom, fov, lat, lon) {
+    let z = Math.max(2, Math.floor(zoom));
+    const x = getTileNumberX(z, lon); // cameraLon
+    const y = getTileNumberY(z, lat);
+    let tileWidthKm = getDistance(getLatitudeFromTile(z, Math.floor(y)), getLongitudeFromTile(z, x), getLatitudeFromTile(z, Math.floor(y) + 1),
+        getLongitudeFromTile(z, x)) / 1000;
+    let tilesToFitScreen = (GlCanvasSize / TileSize);
+    let screenInKm = (tileWidthKm * getPowZoom(z - zoom) * tilesToFitScreen);
+    return (screenInKm / 2) / (Math.tan(fov * Math.PI / 180 / 2));
+}
+
+function findPixelPerfectZoomForCamHeight(zoom, fov, lat, lon, height) {
+    // Use Newton method to not calculate reverse
+    let calcZoom = zoom;
+    let hVal = findPixelPerfectCameraHeightForZoom(calcZoom, fov, lat, lon) - height;
+    let calcZoomNext = calcZoom;
+    let hValNext = hVal;
+    while (Math.abs(hValNext) > 0.01) {
+        let newCalcZoom;
+        if (calcZoomNext == calcZoom) {
+            newCalcZoom = calcZoom + (hValNext > height ? 0.5 : -0.5);
+        } else {
+            newCalcZoom = calcZoomNext - hValNext * (calcZoomNext - calcZoom) / (hValNext - hVal);
+        }
+        hVal = hValNext;
+        calcZoom = calcZoomNext;
+        calcZoomNext = newCalcZoom;
+        hValNext = findPixelPerfectCameraHeightForZoom(calcZoomNext, fov, lat, lon) - height;
+    }
+    return calcZoomNext;
+}
+
+// MAIN FORMULA between Camera - Target
+// targetDiff = (targetLat - cameraLat)
+// 1) cos(targetDiff) * Rad + cos(camAngle) * targetDist = camHeight + Rad
+// 2) sin(targetDiff) * Rad = sin(camAngle) * targetDist
+// 3) sin(camAngle + targetDiff) * Rad = sin(camAngle) * (Rad + camHeight)
+// ZOOM = findPixelPerfectZoomForCamHeight(TargetDist)
+
+function updateCameraLocWithGivenTarget() {
+    // keep targetDist constant and move camera lat / height
+    // SEE MAIN FORMULA between Camera - Target
+    // step back to look at targetLat
+    const lookAtAngleMax = Math.asin(EarthRadiusEquator / (EarthRadiusEquator + CONFIG.cameraHeight));
+    let camAngle = 0; 
+    let targetDiff = 1;
+    while (targetDiff >= 1) {
+        camAngle = CONFIG.cameraAngle / 180 * Math.PI;
+        targetDiff = Math.sin(camAngle) * (CONFIG.targetDist / EarthRadiusEquator)
+        if (targetDiff > 1) {
+            CONFIG.cameraAngle *= 0.9;
+        }
+    } 
+    CONFIG.cameraLat = CONFIG.targetLat - targetDiff * 180 / Math.PI;
+    CONFIG.cameraHeight = CONFIG.targetDist * Math.cos(camAngle) + EarthRadiusEquator * (Math.cos(targetDiff) - 1);
+}
+
+function updateTargetLocWithGivenCamera() {
     // const lookAtAngleMax = Math.asin(EarthRadiusEquator / (EarthRadiusEquator + CONFIG.cameraHeight)) ;
     // const camAngle = Math.min(1, CONFIG.cameraAngle) * lookAtAngleMax;
     const camAngle = CONFIG.cameraAngle / 180 * Math.PI;
-
-    // 1) cos(targetDiff) * Rad + cos(camAngle) * targetDist = camHeight + Rad
-    // 2) sin(targetDiff) * Rad = sin(camAngle) * targetDist
-    // 3) sin(camAngle + targetDiff) * Rad = sin(camAngle) * (Rad + camHeight)
-    // RESULT
+    // SEE MAIN FORMULA between Camera - Target
     CONFIG.targetLat = (Math.asin(Math.sin(camAngle) / EarthRadiusEquator * (CONFIG.cameraHeight + EarthRadiusEquator)) - 
                         camAngle) / Math.PI * 180 + CONFIG.cameraLat;
     const targetDiff = (CONFIG.targetLat - CONFIG.cameraLat) / 180 * Math.PI;
     // targetDist = (camHeight + Rad) * tan(targetDiff) / (sin(camAngle) + cos(camAngle) * tan(targetDiff))
-    if (Math.abs(targetDiff) < 0.000001) {
+    if (Math.abs(targetDiff) < 0.00001) {
         // limit if targetDiff -> 0
         CONFIG.targetDist = CONFIG.cameraHeight; 
     } else {
@@ -783,20 +838,23 @@ function updateTargetLoc() {
                 (CONFIG.cameraHeight + EarthRadiusEquator) / (Math.sin(camAngle) + Math.cos(camAngle) * Math.tan(targetDiff))
     }
     CONFIG.targetLon = CONFIG.cameraLon;
-    
+}
+
+
+function updateTargetLocText() {
+
     document.getElementById("targetLatText").value = "LAT " + CONFIG.targetLat.toFixed(5);
     document.getElementById("targetLonText").value = "LON " + CONFIG.targetLon.toFixed(5);
-    document.getElementById("targetDistText").value = "DIST " + (CONFIG.targetDist).toFixed(4) + " km" ;
+    document.getElementById("targetDistText").value = "DIST " + (CONFIG.targetDist).toFixed(4) + " km";
 
     const z = (CONFIG.textureTilesZoom ? CONFIG.textureTilesZoom : 2);
     document.getElementById("targetTileZoomText").value = "Z " + z;
     document.getElementById("targetTileXText").value = "X " + getTileNumberX(z, CONFIG.targetLon).toFixed(2);
     document.getElementById("targetTileYText").value = "Y " + getTileNumberY(z, CONFIG.targetLat).toFixed(2);
-    document.getElementById("targetProjDistText").value = "ON GLOBE " + (getDistance(CONFIG.targetLat, CONFIG.targetLon, 
+    document.getElementById("targetProjDistText").value = "ON GLOBE " + (getDistance(CONFIG.targetLat, CONFIG.targetLon,
         CONFIG.cameraLat, CONFIG.cameraLon) / 1000).toFixed(3) + " km";
-    
-
 }
+
 
 function addListeners() {
     var drawMode = document.getElementById('drawMode');
@@ -836,8 +894,15 @@ function addListeners() {
             let newCoords = getClippedCoords(e);
             CONFIG.cameraLat += (mouseCoords[1] - newCoords[1]) * CONFIG.cameraHeight / 400;
             CONFIG.cameraLon += (mouseCoords[0] - newCoords[0]) * CONFIG.cameraHeight / 400; 
+            updateTargetLocWithGivenCamera();
+
+            CONFIG.cameraZoom = findPixelPerfectZoomForCamHeight(CONFIG.cameraZoom, CONFIG.fieldOfView, CONFIG.cameraLat, CONFIG.cameraLon, CONFIG.targetDist);
+            camZoom.value = CONFIG.cameraZoom;
+            
+
+            updateCamZoomAngleTxt();
             updateCameraPosText();
-            updateTargetLoc();
+            updateTargetLocText();
             mouseCoords = newCoords;
         }
     });
@@ -860,10 +925,14 @@ function addListeners() {
         camZoomText.value = "Zoom: " + CONFIG.cameraZoom.toFixed(2) + ", " + CONFIG.cameraHeight.toFixed(CONFIG.cameraHeight < 1 ? 3 : 3) + " km" ; 
         const lookAtAngleMax = Math.asin(1 / (1 + CONFIG.cameraHeight / EarthRadiusEquator)) * 180 / Math.PI;
         // camAngleText.value = "ANGLE: " + camAngle.value + ", " + (camAngle.value *  lookAtAngleMax).toFixed(1) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
-        camAngleText.value = "ANGLE: " + camAngle.value + ", " + CONFIG.cameraAngle.toFixed(1) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
+        if (camAngle.value != CONFIG.cameraAngle) {
+            camAngle.value = CONFIG.cameraAngle;
+        }
+        camAngleText.value = "ANGLE: " + CONFIG.cameraAngle.toFixed(1) + "°[" + lookAtAngleMax.toFixed(1) + "°]";
     }
 
     const syncZoom = document.getElementById("syncZoom");
+
     function syncZooms() {
         if (CONFIG.syncZoom) {
             const text = Math.max(Math.max(TileMinZoom, 2), Math.min(Math.floor(CONFIG.cameraZoom), TileMaxZoom));
@@ -876,30 +945,22 @@ function addListeners() {
         syncZooms();
     });
 
-    function calcPixelPerfectCameraHeight(zm, fov, lat, lon) {
-        let z = Math.max(2, Math.floor(zm));
-        const x = getTileNumberX(z, lon); // cameraLon
-        const y = getTileNumberY(z, lat);
-        let tileWidthKm = getDistance(getLatitudeFromTile(z, Math.floor(y)), getLongitudeFromTile(z, x), getLatitudeFromTile(z, Math.floor(y) + 1),
-            getLongitudeFromTile(z, x)) / 1000;
-        let tilesToFitScreen = (GlCanvasSize / TileSize);
-        let screenInKm = (tileWidthKm * getPowZoom(z - zm) * tilesToFitScreen);
-        return (screenInKm / 2) / (Math.tan(fov * Math.PI / 180 / 2));
-    }
-
+    
     function setCamZoomValue(vl) {
         CONFIG.cameraZoom = vl;
         camZoom.value = CONFIG.cameraZoom;
-        CONFIG.cameraHeight = calcPixelPerfectCameraHeight(CONFIG.cameraZoom, CONFIG.fieldOfView, CONFIG.cameraLat, CONFIG.cameraLon);
-        // CONFIG.eyePosition = Math.pow(2, 5 - CONFIG.eyeZoom) * 3800;
-        // CONFIG.eyePosition = Math.pow(2, 4 - CONFIG.eyeZoom) * EarthRadiusEquator;
-        
-        updateCamZoomAngleTxt();
-        updateTargetLoc();
+
+        CONFIG.targetDist = findPixelPerfectCameraHeightForZoom(CONFIG.cameraZoom, CONFIG.fieldOfView, CONFIG.cameraLat, CONFIG.cameraLon);
+        //updateTargetLocWithGivenCamera();
+        updateCameraLocWithGivenTarget();
         syncZooms();
+
+        updateCamZoomAngleTxt();
+        updateCameraPosText();
+        updateTargetLocText();
     }
 
-    setCamZoomValue(CONFIG.cameraZoom);
+    camZoom.value = CONFIG.cameraZoom;
     camZoom.addEventListener('input', function () {
         setCamZoomValue(parseFloat(camZoom.value));
     });
@@ -909,51 +970,26 @@ function addListeners() {
     });
     camAngle.addEventListener('input', function () {
         const lookAtAngleMax = Math.asin(EarthRadiusEquator / (EarthRadiusEquator + CONFIG.cameraHeight));
-        CONFIG.cameraAngle = Math.min(camAngle.value, lookAtAngleMax * 180 / Math.PI - 0.1);    
+        CONFIG.cameraAngle = Math.min(camAngle.value, lookAtAngleMax * 180 / Math.PI - 0.1);
         if (RotateAroundCenter) {
-            // const camAngle = Math.min(1, CONFIG.cameraAngle) * lookAtAngleMax;
-            const camAngle = CONFIG.cameraAngle / 180 * Math.PI;
-            // 1) cos(targetDiff) * Rad + cos(camAngle) * targetDist = camHeight + Rad
-            // 2) sin(targetDiff) * Rad = sin(camAngle) * targetDist
-            // 3) sin(camAngle + targetDiff) * Rad = sin(camAngle) * (Rad + camHeight)
-            // step back to look at targetLat
-            const targetDiff = Math.asin(Math.sin(camAngle) * (CONFIG.targetDist / EarthRadiusEquator));
-            CONFIG.cameraLat = CONFIG.targetLat - targetDiff * 180 / Math.PI;
-            CONFIG.cameraHeight = CONFIG.targetDist * Math.cos(camAngle) + EarthRadiusEquator * (Math.cos(targetDiff) - 1);
-
-            // reversive find cameraZoom
-            let calcZoom = CONFIG.cameraZoom;
-            let hVal = calcPixelPerfectCameraHeight(calcZoom, CONFIG.fieldOfView, CONFIG.cameraLat, CONFIG.cameraLon) - CONFIG.targetDist;
-            let calcZoomNext = calcZoom;
-            let hValNext = hVal;
-            // Newton method to not calculate reverse
-            while (Math.abs(hValNext) > 0.01) {
-                let newCalcZoom;
-                if (calcZoomNext == calcZoom) {
-                    newCalcZoom = calcZoom + (hValNext > CONFIG.cameraHeight ? 0.5 : -0.5);
-                } else {
-                    newCalcZoom = calcZoomNext - hValNext * (calcZoomNext - calcZoom) / (hValNext - hVal);
-                }
-                hVal = hValNext;
-                calcZoom = calcZoomNext;
-                calcZoomNext = newCalcZoom;
-                hValNext = calcPixelPerfectCameraHeight(calcZoomNext, CONFIG.fieldOfView, CONFIG.cameraLat, CONFIG.cameraLon) - CONFIG.targetDist;
-            }
-            CONFIG.cameraZoom = calcZoomNext;
-            camZoom.value = calcZoomNext;
-            syncZooms();
+            updateCameraLocWithGivenTarget();
+        } else {
+            updateTargetLocWithGivenCamera();
         }
+        CONFIG.cameraZoom = findPixelPerfectZoomForCamHeight(CONFIG.cameraZoom, CONFIG.fieldOfView, CONFIG.cameraLat, CONFIG.cameraLon, CONFIG.targetDist);
+        camZoom.value = CONFIG.cameraZoom;
+
+        syncZooms();
+
         // recalculate lat / lon / distance to keep center in same place
         updateCameraPosText();
         updateCamZoomAngleTxt();
-        // accumulates error on critical angles
-        updateTargetLoc();
-
+        updateTargetLocText();
     });
 
 
     const fieldOfView = document.getElementById('sliderFOVAngle');
-    const fieldOfViewText =document.getElementById('sliderFOVAngleText');
+    const fieldOfViewText = document.getElementById('sliderFOVAngleText');
     fieldOfView.value =  CONFIG.fieldOfView;
     fieldOfViewText.value = 'FOV: ' + CONFIG.fieldOfView + '°';
     fieldOfView.addEventListener('input', function () {
@@ -962,10 +998,13 @@ function addListeners() {
         fieldOfViewText.value = 'FOV: ' + CONFIG.fieldOfView + '°';
         CONFIG.updateBuffer = true;
     });
-
-
     
+    // INIT
+    CONFIG.cameraHeight = findPixelPerfectCameraHeightForZoom(CONFIG.cameraZoom, CONFIG.fieldOfView, CONFIG.cameraLat, CONFIG.cameraLon);
+    updateTargetLocWithGivenCamera();
+    setCamZoomValue(CONFIG.cameraZoom);
+    // updateCameraPosText();
+    // updateCamZoomAngleTxt();
+    // updateTargetLocText();
     
-    updateCameraPosText();
-
 }
