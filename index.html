@@ -21,12 +21,12 @@
         }
 
         header {
-            background-color: #2c3e50;
-            color: #ecf0f1;
+            background-color: #2c3e50; /* Dark Blue-Gray */
+            color: #ecf0f1; /* Light Gray */
             padding: 2rem 0;
             text-align: center;
             margin-bottom: 40px;
-            border-bottom: 4px solid #e74c3c;
+            border-bottom: 4px solid #e74c3c; /* Red-Orange Accent */
         }
 
         header h1 {
@@ -43,8 +43,8 @@
 
         .project-card {
             background-color: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border-radius: 12px; /* Slightly more rounded */
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); /* Softer shadow */
             overflow: hidden;
             transition: transform 0.3s ease, box-shadow 0.3s ease;
             display: flex;
@@ -52,24 +52,20 @@
         }
 
         .project-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            transform: translateY(-6px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
         }
 
-        .project-card-image-placeholder {
-            background-color: #bdc3c7; /* Placeholder color */
-            height: 200px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2em;
-            color: #7f8c8d;
-            /* In a real scenario, you would use an <img> tag here */
-            /* e.g., <img src="path/to/project-image.jpg" alt="Project Name"> */
+        .project-card-emoji {
+            font-size: 4.5em; /* Larger emoji */
+            text-align: center;
+            padding: 30px 20px 20px 20px; /* More padding around emoji */
+            background-color: #e9ecef; /* Light background for emoji area */
+            border-bottom: 1px solid #dee2e6;
         }
 
         .project-card-content {
-            padding: 20px;
+            padding: 25px; /* More padding in content area */
             flex-grow: 1;
             display: flex;
             flex-direction: column;
@@ -77,33 +73,34 @@
 
         .project-card-content h2 {
             margin-top: 0;
-            margin-bottom: 10px;
-            font-size: 1.5em;
-            color: #34495e;
+            margin-bottom: 12px;
+            font-size: 1.6em; /* Slightly larger title */
+            color: #34495e; /* Darker Blue */
         }
 
         .project-card-content p {
-            font-size: 0.95em;
+            font-size: 0.98em; /* Slightly larger description text */
             color: #555;
-            margin-bottom: 20px;
-            flex-grow: 1; /* Allows description to take available space */
+            margin-bottom: 25px;
+            flex-grow: 1;
         }
 
         .project-card-content a.project-link {
             display: inline-block;
             background-color: #e74c3c;
             color: #ffffff;
-            padding: 10px 18px;
+            padding: 12px 20px; /* Larger button */
             text-decoration: none;
-            border-radius: 5px;
+            border-radius: 6px;
             font-weight: bold;
             text-align: center;
-            transition: background-color 0.3s ease;
-            margin-top: auto; /* Pushes button to the bottom */
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            margin-top: auto;
         }
 
         .project-card-content a.project-link:hover {
-            background-color: #c0392b;
+            background-color: #c0392b; /* Darker Red-Orange */
+            transform: translateY(-2px);
         }
 
         footer {
@@ -114,13 +111,17 @@
             color: #ecf0f1;
             font-size: 0.9em;
         }
-         /* Responsive adjustments */
+
+        /* Responsive adjustments */
         @media (max-width: 768px) {
             header h1 {
                 font-size: 2.2em;
             }
             .projects-grid {
-                grid-template-columns: 1fr; /* Stack cards on smaller screens */
+                grid-template-columns: 1fr;
+            }
+            .project-card-emoji {
+                font-size: 4em;
             }
         }
 
@@ -129,10 +130,14 @@
                 font-size: 1.8em;
             }
             .project-card-content h2 {
-                font-size: 1.3em;
+                font-size: 1.4em;
+            }
+            .project-card-emoji {
+                font-size: 3.5em;
+                padding: 25px 15px 15px 15px;
             }
             .project-card-content a.project-link {
-                padding: 8px 15px;
+                padding: 10px 18px;
                 font-size: 0.9em;
             }
         }
@@ -148,9 +153,8 @@
         <div class="projects-grid">
 
             <div class="project-card">
-                <div class="project-card-image-placeholder">
-                    <span>Lab Icon/Image</span>
-                </div>
+                <div class="project-card-emoji">
+                    🎨👁️‍🗨️ </div>
                 <div class="project-card-content">
                     <h2>Test Color Vision</h2>
                     <p>A project to test aspects of color vision. Explore various tests and challenges related to color perception.</p>
@@ -159,20 +163,18 @@
             </div>
 
             <div class="project-card">
-                <div class="project-card-image-placeholder">
-                    <span>Web Icon/Image</span>
-                </div>
+                <div class="project-card-emoji">
+                    🧊 </div>
                 <div class="project-card-content">
-                    <h2>Web</h2>
-                    <p>General web development projects and experiments. Discover a collection of web-based tools or showcases.</p>
+                    <h2>WebGL</h2>
+                    <p>A test project demonstrating a 3D cube rendered with WebGL. Explore basic 3D graphics in the browser.</p>
                     <a href="webgl.html" class="project-link">View Project</a>
                 </div>
             </div>
 
             <div class="project-card">
-                <div class="project-card-image-placeholder">
-                    <span>Earth Icon/Image</span>
-                </div>
+                <div class="project-card-emoji">
+                    🌍 </div>
                 <div class="project-card-content">
                     <h2>Earth WebGL</h2>
                     <p>An interactive 3D representation of the Earth using WebGL technology. Explore global data or visualizations.</p>
@@ -181,9 +183,8 @@
             </div>
 
             <div class="project-card">
-                <div class="project-card-image-placeholder">
-                    <span>Solar System Icon/Image</span>
-                </div>
+                <div class="project-card-emoji">
+                    ☀️🌕🌍 </div>
                 <div class="project-card-content">
                     <h2>Earth-Moon-Sun</h2>
                     <p>A simulation or visualization of the Earth, Moon, and Sun system, likely demonstrating orbital mechanics or celestial events.</p>
