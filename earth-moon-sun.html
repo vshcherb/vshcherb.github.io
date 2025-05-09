@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGL Earth with Day Slider, Moon, Sun/Moon Positions, Shadow & Zoom</title> <style>
+    <title>WebGL Earth with Day Slider, Moon, Sun/Moon Positions, Shadow & Zoom</title>
+    <style>
         body {
             margin: 0;
             font-family: 'Inter', sans-serif;
@@ -58,9 +59,9 @@
         #controls input[type="range"] {
             width: 150px; /* Fixed width for sliders */
         }
-        #timeValue, #tileZoomValue, #dayOfYearValue { /* Added dayOfYearValue */
+        #timeValue, #tileZoomValue, #dayOfYearValue, #moonDistanceFactorValue, #sunDistanceFactorValue { /* Added new value displays */
             font-size: 0.9em;
-            margin-left: 8px; 
+            margin-left: 8px;
             min-width: 45px; /* Ensure consistent width for value displays */
             display: inline-block;
         }
@@ -89,7 +90,8 @@
             text-align: center;
         }
         /* Style for Celestial Point Display */
-        #celestialInfo { 
+        
+        #overallInfo {
             position: absolute;
             top: 20px;
             right: 20px;
@@ -100,9 +102,9 @@
             border: 1px solid rgba(255, 255, 255, 0.2);
             z-index: 10;
             font-size: 0.9em;
-            line-height: 1.4; 
+            line-height: 1.4;
             text-align: right;
-            display: none; /* Hidden initially */
+            display: block; /* Hidden initially */
         }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
@@ -116,6 +118,7 @@
             <div class="button-group">
                 <button id="zoomInBtn">+</button>
                 <button id="zoomOutBtn">-</button>
+                <button id="hideEarthBtn">Hide</button>
             </div>
         </div>
         <div class="control-group">
@@ -131,8 +134,8 @@
         <div class="control-group">
             <label for="timeSlider">Time (UTC):</label>
             <div>
-                <input type="range" id="timeSlider" min="0" max="1439" value="720">
-                <span id="timeValue">12:00</span>
+                <input type="range" id="timeSlider" min="0" max="1439" value="1080">
+                <span id="timeValue">18:00</span>
             </div>
         </div>
         <div class="control-group">
@@ -142,9 +145,26 @@
                 <span id="tileZoomValue">3</span>
             </div>
         </div>
+        <div class="control-group">
+            <label for="moonDistanceFactorSlider">Moon Visual Dist. Factor:</label>
+            <div>
+                <input type="range" id="moonDistanceFactorSlider" min="1" max="30" value="1" step="0.1">
+                <span id="moonDistanceFactorValue">1.0x</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label for="sunDistanceFactorSlider">Sun Visual Dist. Factor:</label>
+            <div>
+                <input type="range" id="sunDistanceFactorSlider" min="1" max="30" value="1" step="0.1">
+                <span id="sunDistanceFactorValue">1.0x</span>
+            </div>
+        </div>
     </div>
 
-    <div id="celestialInfo">Calculating...</div>
+    <div id="overallInfo">
+        <div id="earthInfo">Calculating...</div>
+        <div id="celestialInfo">Calculating...</div>
+    </div>
     <div id="messageBox"></div>
 
     <script type="importmap">
@@ -161,27 +181,29 @@
 
         // --- Global Variables ---
         let scene, camera, renderer, earthMesh, sunLight, controls, moonMesh, moonProjectionMesh;
+        let sunMesh; // Mesh for the Sun globe
         let sunProjectionMesh; // Mesh to show subsolar point
         let northPoleMeshGlobal, southPoleMeshGlobal; // Meshes for polar caps
         let currentTileZoomLevel = 4; // Initial tile zoom level for map
         let moonShadowMesh; // Mesh for the Moon's umbra (shadow)
+        let currentMoonDistanceFactor = 1.0;
+        let currentSunDistanceFactor = 1.0;
+        
 
         // --- Constants ---
         const EARTH_RADIUS = 5; // Arbitrary radius for Earth in scene units
-        const MOON_DISTANCE = 60.3; // Actual average distance from Earth to Moon in Earth radius;
-        const SUN_DISTANCE = 23460; // Actual average distance from Earth to Sun in Earth radius
+        const MOON_DISTANCE = 60.3; // Actual average distance from Earth to Moon in Earth radii
+        const SUN_DISTANCE = 23460; // Actual average distance from Earth to Sun in Earth radii
         const MOON_RADIUS = EARTH_RADIUS / 3.67; // Relative Moon radius
-        const VISUAL_MOON_DISTANCE_FACTOR = 15; // Visual distance of Moon from Earth (not to scale for orbit, but for visuals)
-                                                // Actual average distance is ~60.3 Earth radii.
-                                                // Smaller values bring Moon closer for easier viewing.
+        const SUN_RADIUS_IN_EARTH_RADII = 109.0; // Sun's radius relative to Earth's radius
+        // VISUAL_MOON_DISTANCE_FACTOR is now replaced by dynamic slider
 
         // Constants for Moon's Umbra (shadow)
         const MOON_SHADOW_COLOR = 0x4A2A00; // Dark orange for the shadow
         const MOON_SHADOW_OPACITY = 0.75;   // Opacity of the shadow
         const ECLIPSE_UMBRA_RADIUS_ON_EARTH_SCENE_UNITS = 0.35; // Visual radius of the umbra on Earth in scene units.
-                                                              // Actual umbra size varies, this is for visual representation.
-        const ECLIPSE_THRESHOLD_ANGLE_RAD = (0.35 * Math.PI / 180); // Max angular separation (Sun-Earth-Moon) to show umbra (degrees to radians)
-                                                                   // A small angle means Sun and Moon must be closely aligned.
+        const ECLIPSE_THRESHOLD_ANGLE_RAD = (0.60 * Math.PI / 180); // Max angular separation (Sun-Earth-Moon) to show umbra (degrees to radians)
+                                                                   // A small angle means Sun and Moon must be closely aligned. Increased slightly for better visibility of shadow.
 
         const TILE_SERVER_URL_SCHEME = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'; // URL scheme for map tiles
         const TILE_CANVAS_SIZE = 4096; // Resolution of the canvas used to stitch map tiles
@@ -189,16 +211,22 @@
         // DOM Elements
         const zoomInBtn = document.getElementById('zoomInBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const hideEarthBtn = document.getElementById('hideEarthBtn');
         const datePicker = document.getElementById('datePicker');
-        const dayOfYearSlider = document.getElementById('dayOfYearSlider'); 
-        const dayOfYearValueDisplay = document.getElementById('dayOfYearValue'); 
+        const dayOfYearSlider = document.getElementById('dayOfYearSlider');
+        const dayOfYearValueDisplay = document.getElementById('dayOfYearValue');
         const timeSlider = document.getElementById('timeSlider');
         const timeValueDisplay = document.getElementById('timeValue');
         const tileZoomSlider = document.getElementById('tileZoomSlider');
         const tileZoomValueDisplay = document.getElementById('tileZoomValue');
+        const moonDistanceFactorSlider = document.getElementById('moonDistanceFactorSlider');
+        const moonDistanceFactorValue = document.getElementById('moonDistanceFactorValue');
+        const sunDistanceFactorSlider = document.getElementById('sunDistanceFactorSlider');
+        const sunDistanceFactorValue = document.getElementById('sunDistanceFactorValue');
         const canvasContainer = document.getElementById('canvas-container');
         const messageBox = document.getElementById('messageBox');
-        const celestialInfoDiv = document.getElementById('celestialInfo'); 
+        const celestialInfoDiv = document.getElementById('celestialInfo');
+        const earthInfoDiv = document.getElementById('earthInfo');
 
         // --- Helper Functions ---
         // Checks if a given year is a leap year
@@ -235,7 +263,7 @@
             scene.background = new THREE.Color(0x050510); // Dark space background
 
             // Camera setup
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, EARTH_RADIUS * SUN_DISTANCE * 1.2); // Adjusted far plane
             camera.position.set(0, EARTH_RADIUS * 0.5, EARTH_RADIUS * 5); // Initial camera position
             camera.lookAt(0, 0, 0); // Look at the center of the scene (Earth)
 
@@ -251,6 +279,15 @@
 
             sunLight = new THREE.DirectionalLight(0xffffff, 3.0); // Main light source (Sun)
             scene.add(sunLight);
+
+
+            // --- Sun Globe ---
+            const sunGeometry = new THREE.SphereGeometry(EARTH_RADIUS * SUN_RADIUS_IN_EARTH_RADII, 64, 64);
+            const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xFFE45A, wireframe: false }); // Bright yellow, non-emissive for simplicity
+            sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+            sunMesh.visible = false; // Initially hidden until position is calculated
+            scene.add(sunMesh);
+
 
             // --- Sun Projection Circle (Subsolar Point Marker) ---
             const sunProjGeom = new THREE.CircleGeometry(EARTH_RADIUS * 0.008, 32); // Small circle
@@ -269,9 +306,9 @@
 
             // --- Moon ---
             const moonGeometry = new THREE.SphereGeometry(MOON_RADIUS, 32, 32);
-            const moonMaterial = new THREE.MeshPhongMaterial({ color: 0xaaaaaa, shininess: 5, specular: 0x111111 }); 
+            const moonMaterial = new THREE.MeshPhongMaterial({ color: 0xaaaaaa, shininess: 5, specular: 0x111111 });
             moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
-            scene.add(moonMesh); 
+            scene.add(moonMesh);
 
             // --- Moon Shadow (Umbra) ---
             const shadowGeometry = new THREE.CircleGeometry(ECLIPSE_UMBRA_RADIUS_ON_EARTH_SCENE_UNITS, 32);
@@ -279,7 +316,7 @@
                 color: MOON_SHADOW_COLOR,
                 transparent: true,
                 opacity: MOON_SHADOW_OPACITY,
-                side: THREE.DoubleSide // Render on both sides (though only one will be visible on sphere)
+                side: THREE.DoubleSide
             });
             moonShadowMesh = new THREE.Mesh(shadowGeometry, shadowMaterial);
             moonShadowMesh.visible = false; // Initially hidden
@@ -290,10 +327,17 @@
             try {
                 await updateEarthTiles(currentTileZoomLevel); // Load initial map tiles
                 // Initial date setup and sync
-                //const today = new Date();
-                const today = new Date("2026-08-12T18:02:00");
-                datePicker.value = formatDate(today); 
+                //const today = new Date(); // Original
+                const today = new Date("2026-08-12T"+timeValueDisplay.textContent+":00Z"); // Example date, ensure UTC interpretation
+                datePicker.value = formatDate(today);
                 syncDaySliderToDate(); // Sync day slider to the initial date
+
+                // Initialize slider values from HTML defaults
+                currentMoonDistanceFactor = parseFloat(moonDistanceFactorSlider.value);
+                moonDistanceFactorValue.textContent = `${currentMoonDistanceFactor.toFixed(1)}x`;
+                currentSunDistanceFactor = parseFloat(sunDistanceFactorSlider.value);
+                sunDistanceFactorValue.textContent = `${currentSunDistanceFactor.toFixed(1)}x`;
+
                 updateCelestialPositions(); // Calculate initial Sun/Moon positions
             } catch (error) {
                 console.error("Error during initial scene setup:", error);
@@ -304,20 +348,25 @@
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true; // Smooth camera movement
             controls.dampingFactor = 0.05;
-            controls.minDistance = EARTH_RADIUS + 0.2; // Prevent zooming inside Earth
-            controls.maxDistance = EARTH_RADIUS * 20; // Max zoom out distance
+            controls.minDistance = EARTH_RADIUS + 0.1; // Prevent zooming inside Earth
+            controls.maxDistance = EARTH_RADIUS * SUN_DISTANCE * 1.1; // Adjusted max zoom out
             controls.enablePan = false; // Disable panning
 
             // --- UI Event Listeners ---
             zoomInBtn.addEventListener('click', () => zoomCamera(0.8));
             zoomOutBtn.addEventListener('click', () => zoomCamera(1.25));
+            hideEarthBtn.addEventListener('click', () => {
+                hideEarthBtn.textContent = earthMesh.visible ? "Show" : "Hide";
+                earthMesh.visible = !earthMesh.visible
+            });
             
-            datePicker.addEventListener('change', () => { // Use 'change' for date picker for better UX
+
+            datePicker.addEventListener('change', () => {
                 syncDaySliderToDate();
                 updateCelestialPositions();
             });
 
-            dayOfYearSlider.addEventListener('input', () => { // Use 'input' for immediate feedback from slider
+            dayOfYearSlider.addEventListener('input', () => {
                 syncDateToDaySlider();
                 updateCelestialPositions();
             });
@@ -335,72 +384,74 @@
                 tileZoomValueDisplay.textContent = newZoomLevel;
                 if (newZoomLevel !== currentTileZoomLevel) {
                     currentTileZoomLevel = newZoomLevel;
-                    showMessage(`Loading tiles for zoom level ${currentTileZoomLevel}... This may take a moment.`, "info", 0); // 0 duration = persistent until next message
+                    showMessage(`Loading tiles for zoom level ${currentTileZoomLevel}... This may take a moment.`, "info", 0);
                     await updateEarthTiles(currentTileZoomLevel);
-                    updateCelestialPositions(); // Update positions as Earth texture might affect visuals
+                    updateCelestialPositions();
                 }
             });
 
-            window.addEventListener('resize', onWindowResize); // Handle window resizing
-            animate(); // Start the animation loop
+            moonDistanceFactorSlider.addEventListener('input', () => {
+                currentMoonDistanceFactor = parseFloat(moonDistanceFactorSlider.value);
+                moonDistanceFactorValue.textContent = `${currentMoonDistanceFactor.toFixed(1)}x`;
+                updateCelestialPositions();
+            });
+
+            sunDistanceFactorSlider.addEventListener('input', () => {
+                currentSunDistanceFactor = parseFloat(sunDistanceFactorSlider.value);
+                sunDistanceFactorValue.textContent = `${currentSunDistanceFactor.toFixed(1)}x`;
+                updateCelestialPositions();
+            });
+
+
+            window.addEventListener('resize', onWindowResize);
+            controls.addEventListener('change', function() {
+                updateEarthInfo();
+            });
+            animate();
+            updateEarthInfo();
         }
 
         // --- Date/Day Slider Synchronization ---
-        // Updates the day-of-year slider based on the date picker's value
         function syncDaySliderToDate() {
             const dateStr = datePicker.value;
-            if (!dateStr) return; // Exit if date picker is empty
+            if (!dateStr) return;
             const year = parseInt(dateStr.substring(0, 4));
-            const month = parseInt(dateStr.substring(5, 7)) - 1; // Month is 0-indexed for Date object
+            const month = parseInt(dateStr.substring(5, 7)) - 1;
             const day = parseInt(dateStr.substring(8, 10));
             const currentUtcDate = new Date(Date.UTC(year, month, day));
-            
             const dayNum = getDayOfYear(currentUtcDate);
-            
-            // Update slider's max value based on whether it's a leap year
             dayOfYearSlider.max = isLeap(year) ? 366 : 365;
-            
             dayOfYearSlider.value = dayNum;
             dayOfYearValueDisplay.textContent = dayNum;
         }
 
-        // Updates the date picker based on the day-of-year slider's value
         function syncDateToDaySlider() {
             const dayNum = parseInt(dayOfYearSlider.value);
-            const dateStr = datePicker.value; // Get current year from date picker
-            let year = new Date().getUTCFullYear(); // Default to current year if picker is empty
+            const dateStr = datePicker.value;
+            let year = new Date().getUTCFullYear();
              if (dateStr) {
                  year = parseInt(dateStr.substring(0, 4));
              } else {
-                 // If date picker was empty, update it with the first day of current year
                  datePicker.value = formatDate(getDateFromDay(year, 1));
              }
-
-            // Update slider's max value based on year (in case it changed via date picker)
             dayOfYearSlider.max = isLeap(year) ? 366 : 365;
-            
             const newDate = getDateFromDay(year, dayNum);
-            datePicker.value = formatDate(newDate); // Update date picker
-            dayOfYearValueDisplay.textContent = dayNum; // Update slider display
+            datePicker.value = formatDate(newDate);
+            dayOfYearValueDisplay.textContent = dayNum;
         }
 
 
         // --- Mercator Tile to Geographic Coordinate Helpers ---
-        // Converts tile X coordinate and zoom level to longitude
         function tile2lon(x, z) { return x / Math.pow(2, z) * 360 - 180; }
-        // Converts tile Y coordinate and zoom level to latitude
         function tile2lat(y, z) { const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z); return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))); }
-        // Gets the geographic bounding box for a given map tile
         function getTileGeoBounds(tileX, tileY, zoom) {
             const lon1 = tile2lon(tileX, zoom); const lat1 = tile2lat(tileY, zoom);
             const lon2 = tile2lon(tileX + 1, zoom); const lat2 = tile2lat(tileY + 1, zoom);
-            return { minLon: lon1, maxLon: lon2, minLat: lat2, maxLat: lat1 }; // Note: lat2 is minLat, lat1 is maxLat
+            return { minLon: lon1, maxLon: lon2, minLat: lat2, maxLat: lat1 };
         }
 
         // --- Earth Tile Update ---
-        // Loads map tiles and stitches them onto a canvas, then applies it as a texture to the Earth mesh
         async function updateEarthTiles(zoomLevel) {
-             // Clean up old Earth mesh and its resources if they exist
              if (earthMesh) {
                 scene.remove(earthMesh);
                 if (earthMesh.geometry) earthMesh.geometry.dispose();
@@ -408,226 +459,186 @@
                 if (earthMesh.material) earthMesh.material.dispose();
                 earthMesh = null;
             }
-            // Clean up polar caps if they exist
             if(northPoleMeshGlobal && northPoleMeshGlobal.parent) northPoleMeshGlobal.parent.remove(northPoleMeshGlobal);
             if(southPoleMeshGlobal && southPoleMeshGlobal.parent) southPoleMeshGlobal.parent.remove(southPoleMeshGlobal);
             northPoleMeshGlobal = null; southPoleMeshGlobal = null;
 
-            const earthGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 128, 128); // Higher segments for smoother sphere
+            const earthGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 128, 128);
             const numTilesPerDimension = Math.pow(2, zoomLevel);
-            const tilesToLoad = []; // Array to hold tile information for loading
+            const tilesToLoad = [];
             for (let y = 0; y < numTilesPerDimension; y++) { for (let x = 0; x < numTilesPerDimension; x++) { tilesToLoad.push({ z: zoomLevel, x: x, y: y }); } }
 
-            // Create a canvas to draw the stitched tiles
             const tileCanvas = document.createElement('canvas');
             tileCanvas.width = TILE_CANVAS_SIZE; tileCanvas.height = TILE_CANVAS_SIZE;
             const ctx = tileCanvas.getContext('2d');
-            ctx.fillStyle = '#102030'; // Dark blue placeholder color for empty areas
+            ctx.fillStyle = '#102030';
             ctx.fillRect(0, 0, tileCanvas.width, tileCanvas.height);
 
             const textureLoader = new THREE.TextureLoader();
-            textureLoader.setCrossOrigin("anonymous"); // Important for loading cross-origin images
+            textureLoader.setCrossOrigin("anonymous");
             let loadedCount = 0; const totalTiles = tilesToLoad.length; let progressLastShown = 0;
 
-            // Load all tiles asynchronously
             const promises = tilesToLoad.map(tileInfo => {
                 const tileUrl = TILE_SERVER_URL_SCHEME.replace('{z}', tileInfo.z).replace('{x}', tileInfo.x).replace('{y}', tileInfo.y);
                 return new Promise((resolve) => {
                     textureLoader.load(tileUrl, (texture) => {
-                            const image = texture.image; // The loaded image data
+                            const image = texture.image;
                             try {
-                                // Calculate the drawing position and size on the main canvas based on tile's geo bounds
                                 const geoBounds = getTileGeoBounds(tileInfo.x, tileInfo.y, zoomLevel);
                                 const destX = ((geoBounds.minLon + 180) / 360) * TILE_CANVAS_SIZE;
                                 const destMaxX = ((geoBounds.maxLon + 180) / 360) * TILE_CANVAS_SIZE;
-                                const destY = ((90 - geoBounds.maxLat) / 180) * TILE_CANVAS_SIZE; // Latitude is inverted for y-coordinate
+                                const destY = ((90 - geoBounds.maxLat) / 180) * TILE_CANVAS_SIZE;
                                 const destMaxY = ((90 - geoBounds.minLat) / 180) * TILE_CANVAS_SIZE;
                                 const destWidth = destMaxX - destX; const destHeight = destMaxY - destY;
                                 if (destWidth > 0 && destHeight > 0) { ctx.drawImage(image, 0, 0, image.width, image.height, destX, destY, destWidth, destHeight); }
                             } catch (e) { console.error(`Error processing/drawing tile ${tileUrl} to canvas:`, e); }
                             loadedCount++; const progress = Math.floor((loadedCount / totalTiles) * 100);
-                            // Update progress message periodically
-                            if (progress > progressLastShown + 5 || loadedCount === totalTiles) { 
-                                console.log(`Loaded ${loadedCount}/${totalTiles} tiles (${progress}%) for z=${zoomLevel}`);
+                            if (progress > progressLastShown + 5 || loadedCount === totalTiles) {
                                 showMessage(`Loading tiles: ${progress}% complete...`, "loading", loadedCount === totalTiles ? 1000 : 0); progressLastShown = progress;
                             } resolve();
-                        }, undefined, (error) => { // Error callback for textureLoader.load
+                        }, undefined, (error) => {
                             console.error(`Failed to load tile image: ${tileUrl}`, error);
-                            // Optionally draw a placeholder for the failed tile on the canvas
-                            const placeholderSize = TILE_CANVAS_SIZE / numTilesPerDimension; // Approximate size
-                            drawErrorPlaceholder(ctx, tileInfo.x * placeholderSize, tileInfo.y * placeholderSize, placeholderSize, zoomLevel, tileInfo.x, tileInfo.y, "LoadErr");
+                            drawErrorPlaceholder(ctx, tileInfo.x * (TILE_CANVAS_SIZE / numTilesPerDimension), tileInfo.y * (TILE_CANVAS_SIZE / numTilesPerDimension), (TILE_CANVAS_SIZE / numTilesPerDimension), zoomLevel, tileInfo.x, tileInfo.y, "LoadErr");
                             loadedCount++; const progress = Math.floor((loadedCount / totalTiles) * 100);
                              if (progress > progressLastShown + 5 || loadedCount === totalTiles) {
-                                console.log(`Processed (w/error) ${loadedCount}/${totalTiles} tiles (${progress}%) for z=${zoomLevel}`);
                                 showMessage(`Loading tiles (some errors): ${progress}% complete...`, "loading", loadedCount === totalTiles ? 1000 : 0); progressLastShown = progress;
-                            } resolve(); // Resolve even on error to not block Promise.all
+                            } resolve();
                         } ); }); });
-            
-            await Promise.all(promises); // Wait for all tile loading and drawing to complete
+
+            await Promise.all(promises);
             showMessage(`All ${totalTiles} tile requests for zoom ${zoomLevel} processed.`, "info", 4000);
-            
-            // Create texture from the canvas and apply to Earth material
+
             const earthTexture = new THREE.CanvasTexture(tileCanvas);
-            earthTexture.colorSpace = THREE.SRGBColorSpace; // Correct color space for textures
-            earthTexture.anisotropy = renderer.capabilities.getMaxAnisotropy(); // Improves texture quality at oblique angles
+            earthTexture.colorSpace = THREE.SRGBColorSpace;
+            earthTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
             earthTexture.needsUpdate = true;
             const earthMaterial = new THREE.MeshPhongMaterial({ map: earthTexture, shininess: 10, specular: 0x101010 });
             earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
             scene.add(earthMesh);
-            createPolarCaps(earthMesh); // Add polar caps to the new Earth mesh
-        }
-        
-        // Helper to draw a placeholder on the canvas if a tile fails to load
-        function drawErrorPlaceholder(context, canvasX, canvasY, size, z, tx, ty, errType = "Err") {
-            // This function is a stub. For a real implementation, you might draw a colored square or text.
-            console.warn(`Placeholder for error: ${errType} z${z},${tx},${ty} at approx canvas x:${canvasX}, y:${canvasY}`);
-            // Example: context.fillStyle = 'red'; context.fillRect(canvasX, canvasY, size, size);
+            createPolarCaps(earthMesh);
         }
 
-        // Creates simple white circles for polar caps and adds them to the parent Earth mesh
+        function drawErrorPlaceholder(context, canvasX, canvasY, size, z, tx, ty, errType = "Err") {
+            console.warn(`Placeholder for error: ${errType} z${z},${tx},${ty} at approx canvas x:${canvasX}, y:${canvasY}`);
+            // context.fillStyle = 'rgba(100,0,0,0.5)'; context.fillRect(canvasX, canvasY, size, size);
+        }
+
         function createPolarCaps(parentMesh) {
             if (!parentMesh) return;
-            const poleRadius = EARTH_RADIUS * 0.22; // Radius of the polar caps
+            const poleRadius = EARTH_RADIUS * 0.22;
             const poleSegments = 32;
             const poleMaterial = new THREE.MeshBasicMaterial({ color: 0xf0f5fa, side: THREE.DoubleSide });
 
-            // North Pole Cap
             northPoleMeshGlobal = new THREE.Mesh(new THREE.CircleGeometry(poleRadius, poleSegments), poleMaterial);
-            northPoleMeshGlobal.position.set(0, EARTH_RADIUS + 0.01, 0); // Slightly above the Earth's surface
-            northPoleMeshGlobal.rotation.x = -Math.PI / 2; // Rotate to lie flat on the pole
+            northPoleMeshGlobal.position.set(0, EARTH_RADIUS + 0.01, 0);
+            northPoleMeshGlobal.rotation.x = -Math.PI / 2;
             parentMesh.add(northPoleMeshGlobal);
 
-            // South Pole Cap
             southPoleMeshGlobal = new THREE.Mesh(new THREE.CircleGeometry(poleRadius, poleSegments), poleMaterial);
-            southPoleMeshGlobal.position.set(0, -EARTH_RADIUS - 0.01, 0); // Slightly below the Earth's surface
-            southPoleMeshGlobal.rotation.x = Math.PI / 2; // Rotate to lie flat on the pole
+            southPoleMeshGlobal.position.set(0, -EARTH_RADIUS - 0.01, 0);
+            southPoleMeshGlobal.rotation.x = Math.PI / 2;
             parentMesh.add(southPoleMeshGlobal);
         }
 
         // --- Astronomical Calculation Utilities ---
-        // Converts a JavaScript Date object to Julian Date
         function getJulianDate(date) { return (date.getTime() / 86400000.0) + 2440587.5; }
-        // Calculates Greenwich Mean Sidereal Time (GMST) in degrees
-        function getGMST(jd_ut1) { // jd_ut1 is Julian Date for UT1
-            const T = (jd_ut1 - 2451545.0) / 36525.0; // Time in Julian centuries since J2000.0
-            // Formula for GMST (IAU 1982 model, simplified)
+        function getGMST(jd_ut1) {
+            const T = (jd_ut1 - 2451545.0) / 36525.0;
             let gmst = 280.46061837 + 360.98564736629 * (jd_ut1 - 2451545.0) + 0.000387933 * T * T - (T * T * T / 38710000.0);
-            return (gmst % 360 + 360) % 360; // Ensure positive value in 0-360 range
+            return (gmst % 360 + 360) % 360;
         }
-        
+
         // --- Sun Position Calculation ---
-        // Calculates the subsolar point (latitude, longitude in radians) for a given UTC date
-        // Based on simplified algorithms, good for visualization.
         function getSunGeographicPosition(date) {
-            const jday_UT = getJulianDate(date); 
-            const T = (jday_UT - 2451545.0) / 36525.0; // Julian centuries since J2000
-            // Mean longitude of the Sun, corrected for aberration
-            let L_deg = (280.46645 + 36000.76983 * T + 0.0003032 * T * T); L_deg = (L_deg % 360 + 360) % 360; 
-            // Mean anomaly of the Sun
-            let M_deg = (357.52910 + 35999.05030 * T - 0.0001559 * T * T - 0.00000048 * T * T * T); M_deg = (M_deg % 360 + 360) % 360; 
+            const jday_UT = getJulianDate(date);
+            const T = (jday_UT - 2451545.0) / 36525.0;
+            let L_deg = (280.46645 + 36000.76983 * T + 0.0003032 * T * T); L_deg = (L_deg % 360 + 360) % 360;
+            let M_deg = (357.52910 + 35999.05030 * T - 0.0001559 * T * T - 0.00000048 * T * T * T); M_deg = (M_deg % 360 + 360) % 360;
             const M_rad = M_deg * Math.PI / 180;
-            // Equation of center
             const C1_coeff = (1.914602 - 0.004817 * T - 0.000014 * T * T); const C2_coeff = (0.019993 - 0.000101 * T); const C3_coeff = 0.000289;
             const C_deg = C1_coeff * Math.sin(M_rad) + C2_coeff * Math.sin(2 * M_rad) + C3_coeff * Math.sin(3 * M_rad);
-            // True longitude and ecliptic latitude (assumed to be 0 for Sun)
             const lambda_true_deg = (L_deg + C_deg); const lambda_true_rad = ((lambda_true_deg % 360 + 360) % 360) * Math.PI / 180;
-            // Obliquity of the ecliptic
             const epsilon_deg = (23.439291 - 0.0130042 * T - 0.00000016 * T * T + 0.000000504 * T * T * T); const epsilon_rad = epsilon_deg * Math.PI / 180;
-            // Right ascension (alpha) and declination (delta)
             const alpha_rad = Math.atan2(Math.cos(epsilon_rad) * Math.sin(lambda_true_rad), Math.cos(lambda_true_rad));
             const delta_rad = Math.asin(Math.sin(epsilon_rad) * Math.sin(lambda_true_rad));
-            // Subsolar latitude is the Sun's declination
-            const subsolarLat_rad = delta_rad; 
-            // Subsolar longitude calculation
+            const subsolarLat_rad = delta_rad;
             const gmst_deg = getGMST(jday_UT); const gmst_rad = gmst_deg * Math.PI / 180;
-            let alpha_normalized_rad = alpha_rad; if (alpha_normalized_rad < 0) alpha_normalized_rad += 2 * Math.PI; // Normalize RA to 0-2PI
-            let subsolarLon_rad = alpha_normalized_rad - gmst_rad; // Longitude = RA - GMST
-            // Normalize longitude to -PI to +PI range
+            let alpha_normalized_rad = alpha_rad; if (alpha_normalized_rad < 0) alpha_normalized_rad += 2 * Math.PI;
+            let subsolarLon_rad = alpha_normalized_rad - gmst_rad;
             while (subsolarLon_rad > Math.PI) subsolarLon_rad -= 2 * Math.PI; while (subsolarLon_rad < -Math.PI) subsolarLon_rad += 2 * Math.PI;
             return { latitude: subsolarLat_rad, longitude: subsolarLon_rad };
         }
 
         // --- Moon Position Calculation ---
-        // Calculates Moon's geocentric equatorial coordinates (RA, Dec) and distance for a given UTC date
-        // Based on simplified algorithms (e.g., Meeus, Astronomical Algorithms, Chapter 47 for low precision)
         function getMoonPosition(date) {
-            const jday_UT = getJulianDate(date); const T = (jday_UT - 2451545.0) / 36525.0; // Julian centuries
-            // Moon's mean longitude
+            const jday_UT = getJulianDate(date); const T = (jday_UT - 2451545.0) / 36525.0;
             let L_prime_deg = (218.3164 + 481267.8813 * T); L_prime_deg = (L_prime_deg % 360 + 360) % 360;
-            // Moon's mean anomaly
             let M_prime_deg = (134.9634 + 477198.8675 * T); M_prime_deg = (M_prime_deg % 360 + 360) % 360;
-            // Moon's argument of latitude
             let F_deg = (93.2721 + 483202.0175 * T); F_deg = (F_deg % 360 + 360) % 360;
-            // Sun's mean anomaly (needed for some perturbations)
             let M_sun_deg = (357.5291 + 35999.0503 * T); M_sun_deg = (M_sun_deg % 360 + 360) % 360;
-            // Moon's mean elongation
             let D_deg = (297.8502 + 445267.1115 * T); D_deg = (D_deg % 360 + 360) % 360;
-            
-            // Convert to radians for trig functions
             const M_prime_rad = M_prime_deg * Math.PI / 180; const F_rad = F_deg * Math.PI / 180; const D_rad = D_deg * Math.PI / 180; const M_sun_rad = M_sun_deg * Math.PI / 180; const L_prime_rad = L_prime_deg * Math.PI / 180;
-            
-            // Major periodic terms for longitude (degrees)
             let sum_lon = 0; sum_lon += +6.288774 * Math.sin(M_prime_rad); sum_lon += -1.274027 * Math.sin(M_prime_rad - 2 * D_rad); sum_lon += +0.658314 * Math.sin(2 * D_rad); sum_lon += +0.213618 * Math.sin(2 * M_prime_rad); sum_lon += -0.185116 * Math.sin(M_sun_rad); sum_lon += -0.114332 * Math.sin(2 * F_rad);
-            // Major periodic terms for latitude (degrees)
             let sum_lat = 0; sum_lat += +5.128122 * Math.sin(F_rad); sum_lat += +0.280602 * Math.sin(M_prime_rad + F_rad); sum_lat += +0.277693 * Math.sin(M_prime_rad - F_rad); sum_lat += +0.173237 * Math.sin(2*D_rad - F_rad);
-            // Major periodic terms for distance (Earth radii)
-            let sum_dist = 0; sum_dist += -0.58 * Math.cos(M_prime_rad); sum_dist += -0.16 * Math.cos(M_prime_rad - 2*D_rad); 
-            
-            // Ecliptic longitude, latitude, and distance
-            const lambda_moon_rad = L_prime_rad + sum_lon * Math.PI / 180; const beta_moon_rad = sum_lat * Math.PI / 180; const distance_moon_ER = 60.2666 + sum_dist; // Average distance ~60.27 ER
-            
-            // Convert ecliptic to equatorial coordinates
-            const epsilon_deg = (23.439291 - 0.0130042 * T - 0.00000016 * T * T + 0.000000504 * T * T * T); const epsilon_rad = epsilon_deg * Math.PI / 180; // Obliquity
+            let sum_dist = 0; sum_dist += -0.58 * Math.cos(M_prime_rad); sum_dist += -0.16 * Math.cos(M_prime_rad - 2*D_rad);
+            const lambda_moon_rad = L_prime_rad + sum_lon * Math.PI / 180; const beta_moon_rad = sum_lat * Math.PI / 180; const distance_moon_ER = 60.2666 + sum_dist;
+            const epsilon_deg = (23.439291 - 0.0130042 * T - 0.00000016 * T * T + 0.000000504 * T * T * T); const epsilon_rad = epsilon_deg * Math.PI / 180;
             const sin_epsilon = Math.sin(epsilon_rad); const cos_epsilon = Math.cos(epsilon_rad); const sin_lambda = Math.sin(lambda_moon_rad); const cos_lambda = Math.cos(lambda_moon_rad); const sin_beta = Math.sin(beta_moon_rad); const cos_beta = Math.cos(beta_moon_rad);
-            // Right ascension (alpha_m) and declination (delta_m)
             const alpha_m_rad = Math.atan2(sin_lambda * cos_epsilon - Math.tan(beta_moon_rad) * sin_epsilon, cos_lambda);
             const delta_m_rad = Math.asin(sin_beta * cos_epsilon + cos_beta * sin_epsilon * sin_lambda);
-            let alpha_m_normalized_rad = alpha_m_rad; if (alpha_m_normalized_rad < 0) alpha_m_normalized_rad += 2 * Math.PI; // Normalize RA
-            
+            let alpha_m_normalized_rad = alpha_m_rad; if (alpha_m_normalized_rad < 0) alpha_m_normalized_rad += 2 * Math.PI;
             return { rightAscension: alpha_m_normalized_rad, declination: delta_m_rad, distance: distance_moon_ER };
         }
 
         // --- Update Sun and Moon Positions & Info Display ---
         function updateCelestialPositions() {
-            if (!datePicker.value || !earthMesh) return; // Ensure necessary elements are available
+            if (!datePicker.value || !earthMesh) return;
             const dateStr = datePicker.value;
             const timeMinutes = parseInt(timeSlider.value, 10);
             const hours = Math.floor(timeMinutes / 60);
             const minutes = timeMinutes % 60;
-            // Create current UTC date object based on UI controls
             const currentDate = new Date(Date.UTC(
                 parseInt(dateStr.substring(0, 4)), parseInt(dateStr.substring(5, 7)) - 1, parseInt(dateStr.substring(8, 10)),
                 hours, minutes
             ));
-            
+
             // --- Update Sun ---
             const subsolarPoint = getSunGeographicPosition(currentDate);
             let subsolarLatDeg = NaN;
             let subsolarLonDeg = NaN;
-            let subsolarVec = new THREE.Vector3(1, 0, 0); // Default vector, will be updated
+            let subsolarVec = new THREE.Vector3(1, 0, 0);
 
-             if (subsolarPoint.error) { // Should not happen with current simplified model
+             if (subsolarPoint.error) {
                  console.error("Cannot update sun projection due to error in getSunGeographicPosition.");
-                 if (sunProjectionMesh) sunProjectionMesh.visible = false; 
+                 if (sunProjectionMesh) sunProjectionMesh.visible = false;
+                 if (sunMesh) sunMesh.visible = false;
              } else {
                  subsolarLatDeg = subsolarPoint.latitude * 180 / Math.PI;
                  subsolarLonDeg = subsolarPoint.longitude * 180 / Math.PI;
                  const sunDirection = new THREE.Vector3();
-                 // Vector from Earth's center TO the subsolar point (direction of Sun)
                  sunDirection.setFromSphericalCoords(1, Math.PI/2 - subsolarPoint.latitude,  Math.PI/2 + subsolarPoint.longitude);
-                 subsolarVec.copy(sunDirection); // Store normalized vector to Sun
-                 // Sun light position is far away in the direction of the sun
-                 sunLight.position.copy(sunDirection.clone().multiplyScalar(EARTH_RADIUS * 20)); // Position light source
-                 sunLight.target = earthMesh; // Ensure light points at Earth
+                 subsolarVec.copy(sunDirection);
+
+                 // Sun light position (far away, based on actual direction)
+                 sunLight.position.copy(sunDirection.clone().multiplyScalar(EARTH_RADIUS * SUN_DISTANCE)); // Light source at realistic distance/direction
+                 sunLight.target = earthMesh;
+
+                 // Update Sun Globe position
+                 if (sunMesh) {
+                    const visualSunDistance = (EARTH_RADIUS * SUN_DISTANCE) / currentSunDistanceFactor;
+                    sunMesh.position.copy(sunDirection.clone().multiplyScalar(visualSunDistance));
+                    sunMesh.lookAt(earthMesh.position); // Optional: make it face Earth
+                    sunMesh.visible = true;
+                 }
 
                  // Update subsolar point marker
                  if (sunProjectionMesh) {
                      const projectionPosition = new THREE.Vector3();
-                     projectionPosition.setFromSphericalCoords(EARTH_RADIUS + 0.03, // Slightly above surface
-                            Math.PI / 2 - subsolarPoint.latitude, // Colatitude
-                            Math.PI / 2 + subsolarPoint.longitude); // Azimuthal angle (Longitude adjusted for Three.js)
+                     projectionPosition.setFromSphericalCoords(EARTH_RADIUS + 0.03,
+                            Math.PI / 2 - subsolarPoint.latitude,
+                            Math.PI / 2 + subsolarPoint.longitude);
                      sunProjectionMesh.position.copy(projectionPosition);
-                     sunProjectionMesh.lookAt(earthMesh.position); // Orient marker to face outwards
+                     sunProjectionMesh.lookAt(earthMesh.position);
                      sunProjectionMesh.visible = true;
                  }
              }
@@ -639,60 +650,57 @@
             let sublunarLonRad = NaN;
             let eclipseLatDeg = NaN;
             let eclipseLonDeg = NaN;
-            let moonCartesian = new THREE.Vector3(); // Cartesian position of Moon in scene
-            let earthToMoonVecNormalized = new THREE.Vector3(0, 1, 0); // Default, will be updated
+            let moonCartesian = new THREE.Vector3();
+            let earthToMoonVecNormalized = new THREE.Vector3(0, 1, 0);
 
             if (moonMesh) {
-                const moonPosGeo = getMoonPosition(currentDate); // Get Moon's RA/Dec
-                const visualMoonDistance = EARTH_RADIUS * VISUAL_MOON_DISTANCE_FACTOR; // Visual distance for display
-                
-                // Convert Moon's RA/Dec to sublunar lat/lon
+                const moonPosGeo = getMoonPosition(currentDate);
+                const visualMoonDistance = (EARTH_RADIUS * MOON_DISTANCE) / currentMoonDistanceFactor; // Use MOON_DISTANCE (actual) and factor
+
                 const jday_UT = getJulianDate(currentDate);
                 const gmst_deg = getGMST(jday_UT);
                 const gmst_rad = gmst_deg * Math.PI / 180;
-                
-                sublunarLatRad = moonPosGeo.declination; // Sublunar latitude is Moon's declination
-                sublunarLonRad = moonPosGeo.rightAscension - gmst_rad; // Sublunar longitude = RA - GMST
-                
-                // Normalize sublunar longitude to -PI to +PI
+
+                sublunarLatRad = moonPosGeo.declination;
+                sublunarLonRad = moonPosGeo.rightAscension - gmst_rad;
+
                 while (sublunarLonRad > Math.PI) sublunarLonRad -= 2 * Math.PI;
                 while (sublunarLonRad < -Math.PI) sublunarLonRad += 2 * Math.PI;
 
-                sublunarLatDeg = sublunarLatRad * 180 / Math.PI; 
+                sublunarLatDeg = sublunarLatRad * 180 / Math.PI;
                 sublunarLonDeg = sublunarLonRad * 180 / Math.PI;
 
-                // Calculate Moon's Cartesian position for visualization
                 moonCartesian.setFromSphericalCoords(
                     visualMoonDistance,
-                    Math.PI / 2 - moonPosGeo.declination, // Colatitude
-                    Math.PI / 2  + sublunarLonRad         // Azimuthal angle (Longitude adjusted for scene)
+                    Math.PI / 2 - moonPosGeo.declination,
+                    Math.PI / 2  + sublunarLonRad
                 );
                 moonMesh.position.copy(moonCartesian);
-                moonMesh.lookAt(earthMesh.position); // Moon always faces Earth (tidally locked visual approximation)
-                earthToMoonVecNormalized.copy(moonCartesian).normalize(); // Normalized vector from Earth to Moon
+                moonMesh.lookAt(earthMesh.position);
+                earthToMoonVecNormalized.copy(moonCartesian).normalize();
 
 
-                // Update Moon Projection Circle (Sublunar Point Marker)
                 if (moonProjectionMesh && !isNaN(sublunarLatRad) && !isNaN(sublunarLonRad)) {
                     const moonProjectionPosition = new THREE.Vector3();
                     moonProjectionPosition.setFromSphericalCoords(
-                        EARTH_RADIUS + 0.031, // Slightly above surface, distinct from sun marker
-                        Math.PI / 2 - sublunarLatRad, // Colatitude
-                        Math.PI / 2  + sublunarLonRad  // Azimuth
+                        EARTH_RADIUS + 0.031,
+                        Math.PI / 2 - sublunarLatRad,
+                        Math.PI / 2  + sublunarLonRad
                     );
                     moonProjectionMesh.position.copy(moonProjectionPosition);
-                    moonProjectionMesh.lookAt(earthMesh.position); 
+                    moonProjectionMesh.lookAt(earthMesh.position);
                     moonProjectionMesh.visible = true;
                 } else if (moonProjectionMesh) {
                      moonProjectionMesh.visible = false;
                 }
 
-            } else { // If no moonMesh, hide projection
+            } else {
                  if (moonProjectionMesh) moonProjectionMesh.visible = false;
             }
 
             // --- Moon Shadow (Umbra) Logic ---
-            if (moonShadowMesh && moonMesh && !subsolarPoint.error && earthMesh && !isNaN(sublunarLatRad) && !isNaN(sublunarLonRad)) {
+              // --- Moon Shadow (Umbra) Logic ---
+              if (moonShadowMesh && moonMesh && !subsolarPoint.error && earthMesh && !isNaN(sublunarLatRad) && !isNaN(sublunarLonRad)) {
                 // earthToMoonVecNormalized is the normalized vector from Earth center to Moon
                 // subsolarVec is the normalized vector from Earth center to Sun
                 
@@ -734,66 +742,70 @@
                 } else {
                     infoText += "Subsolar: Error";
                 }
-                infoText += "<br>"; 
+                infoText += "<br>";
                  if (!isNaN(sublunarLatDeg)) {
                     infoText += `Sublunar: ${sublunarLatDeg.toFixed(2)}° Lat, ${sublunarLonDeg.toFixed(2)}° Lon`;
                 } else {
-                    infoText += "Sublunar: Calculating..."; 
+                    infoText += "Sublunar: Calculating...";
                 }
-                infoText += "<br>"; 
-                 if (!isNaN(eclipseLatDeg)) {
-                    infoText += `Eclipse: ${eclipseLatDeg.toFixed(2)}° Lat, ${eclipseLonDeg.toFixed(2)}° Lon`;
+                infoText += "<br>";
+                 if (moonShadowMesh && moonShadowMesh.visible && !isNaN(eclipseLatDeg)) {
+                    infoText += `Eclipse Shadow Approx: ${eclipseLatDeg.toFixed(2)}° Lat, ${eclipseLonDeg.toFixed(2)}° Lon`;
                 } else {
-                    infoText += "Eclipse: -"; 
+                    infoText += "Eclipse Shadow: N/A";
                 }
                 celestialInfoDiv.innerHTML = infoText;
-                celestialInfoDiv.style.display = 'block'; 
             }
         }
 
-        // Zooms the camera in or out by a given factor
+        function updateEarthInfo() {
+            const surfacePoint = camera.position.clone().negate().normalize().multiplyScalar(EARTH_RADIUS);
+            let elat = -Math.asin(surfacePoint.y / EARTH_RADIUS) * (180 / Math.PI);
+            let elon = 180 + (Math.atan2(surfacePoint.x, surfacePoint.z) - Math.PI / 2) * (180 / Math.PI);
+            elon = (elon + 540) % 360 - 180;
+            let dist = (camera.position.length() - EARTH_RADIUS) / EARTH_RADIUS * 6378;
+            let infoText = `Earth: ${elat.toFixed(2)}° Lat, ${elon.toFixed(2)}° Lon, ${dist.toFixed(0)} km`;
+            earthInfoDiv.innerHTML = infoText;
+        }
+
         function zoomCamera(factor) {
             const currentDistance = camera.position.length();
             let newDistance = currentDistance * factor;
-            // Clamp new distance to min/max zoom limits
             newDistance = Math.max(controls.minDistance, Math.min(controls.maxDistance, newDistance));
             camera.position.setLength(newDistance);
+            updateEarthInfo();
         }
 
-        // Handles window resize events to update camera aspect ratio and renderer size
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+            updateEarthInfo();
         }
-        
-        // Displays a message in the message box
-        let messageTimeout; // Timeout ID for clearing messages
+
+        let messageTimeout;
         function showMessage(text, type = "info", duration = 3000) {
             messageBox.textContent = text;
-            // Set background color based on message type
             if (type === "error") messageBox.style.backgroundColor = "rgba(200, 50, 50, 0.9)";
             else if (type === "loading") messageBox.style.backgroundColor = "rgba(50, 50, 150, 0.9)";
-            else messageBox.style.backgroundColor = "rgba(50, 150, 50, 0.9)"; // Default info color
-            
+            else messageBox.style.backgroundColor = "rgba(50, 150, 50, 0.9)";
+
             messageBox.style.display = "block";
-            clearTimeout(messageTimeout); // Clear any existing message timeout
-            if (duration > 0) { // If duration is 0, message stays until replaced
+            clearTimeout(messageTimeout);
+            if (duration > 0) {
                 messageTimeout = setTimeout(() => { messageBox.style.display = "none"; }, duration);
             }
         }
 
-        // Main animation loop
         function animate() {
-            requestAnimationFrame(animate); // Request next frame
-            controls.update(); // Update orbit controls (for damping)
-            renderer.render(scene, camera); // Render the scene
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
         }
 
-        // Ensure init() is called after the DOM is fully loaded
-        if (document.readyState === 'loading') {  // Still loading
+        if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', init);
-        } else {  // `DOMContentLoaded` has already fired
+        } else {
             init();
         }
 
