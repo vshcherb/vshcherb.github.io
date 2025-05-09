@@ -1,6 +1,7 @@
-// +   TODO device independent constant vs pixel-perfect
+// +   TODO device independent constant vs pixel-perfect - check!
 // +   TODO proper tile scale
 // + ? TODO autochange cam height on panning (different projection)
+// TODO LOD of details setting!
 
 // TODO precise drag/drop movements 
 // TODO Hangs around poles
@@ -8,6 +9,7 @@
 
 // TODO Ellipse earth: 1) getDistance 2) problem with rotation (camera height)
 // TODO holes between inequal tiles (should be rectangular network)
+// TODO Day/night shadow on Earth
 
 // ! OPENGL allows only texture power of 2 !
 const TilesCanvasSize = 8; // 8 -> 7x7 (1st row taken by ice / empty)
