@@ -74,6 +74,11 @@
             display: flex;
             gap: 8px;
         }
+        .button-group-shift {
+            /*display: flex;*/
+            display: none;
+            gap: 8px;
+        }
         #messageBox {
             position: absolute;
             bottom: 20px;
@@ -114,12 +119,20 @@
         </div>
     <div id="controls">
         <div class="control-group">
-            <label>Camera Zoom:</label>
+            <label>Camera:</label>
             <div class="button-group">
                 <button id="zoomInBtn">+</button>
                 <button id="zoomOutBtn">-</button>
+                
                 <button id="hideEarthBtn">Hide</button>
             </div>
+            <div class="button-group-shift">
+                <button id="shiftLeftBtn">←</button>
+                <button id="shiftTopBtn">↑</button>
+                <button id="shiftBotBtn">↓</button>
+                <button id="shiftRightBtn">→</button>
+            </div>
+            
         </div>
         <div class="control-group">
             <label for="datePicker">Date:</label>
@@ -178,7 +191,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-
+        
         // --- Global Variables ---
         let scene, camera, renderer, earthMesh, sunLight, controls, moonMesh, moonProjectionMesh;
         let sunMesh; // Mesh for the Sun globe
@@ -188,10 +201,13 @@
         let moonShadowMesh; // Mesh for the Moon's umbra (shadow)
         let currentMoonDistanceFactor = 1.0;
         let currentSunDistanceFactor = 1.0;
+        let _infoRaycaster = new THREE.Raycaster(); // For updateEarthInfo
+        let _viewDirection = new THREE.Vector3(); 
         
 
         // --- Constants ---
         const EARTH_RADIUS = 5; // Arbitrary radius for Earth in scene units
+        const CAMERA_SHIFT_AMOUNT = EARTH_RADIUS / 5;
         const MOON_DISTANCE = 60.3; // Actual average distance from Earth to Moon in Earth radii
         const SUN_DISTANCE = 23460; // Actual average distance from Earth to Sun in Earth radii
         const MOON_RADIUS = EARTH_RADIUS / 3.67; // Relative Moon radius
@@ -211,6 +227,10 @@
         // DOM Elements
         const zoomInBtn = document.getElementById('zoomInBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const shiftRightBtn = document.getElementById('shiftRightBtn');
+        const shiftLeftBtn = document.getElementById('shiftLeftBtn');
+        const shiftTopBtn = document.getElementById('shiftTopBtn');
+        const shiftBotBtn = document.getElementById('shiftBotBtn');
         const hideEarthBtn = document.getElementById('hideEarthBtn');
         const datePicker = document.getElementById('datePicker');
         const dayOfYearSlider = document.getElementById('dayOfYearSlider');
@@ -264,9 +284,21 @@
 
             // Camera setup
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, EARTH_RADIUS * SUN_DISTANCE * 1.2); // Adjusted far plane
-            camera.position.set(0, EARTH_RADIUS * 0.5, EARTH_RADIUS * 5); // Initial camera position
+            camera.position.set(0, 0, EARTH_RADIUS * 5); // Initial camera position
             camera.lookAt(0, 0, 0); // Look at the center of the scene (Earth)
 
+            const nearPlaneCenterMarkerGeometry = new THREE.CircleGeometry(0.001, 16); 
+            const nearPlaneCenterMarkerMaterial = new THREE.MeshBasicMaterial({
+                color: 0xbb0000,        // Bright red for visibility
+                side: THREE.DoubleSide, // Render both sides
+                transparent:true,
+                opacity:0.4
+            });
+            const nearPlaneCenterMarker = new THREE.Mesh(nearPlaneCenterMarkerGeometry, nearPlaneCenterMarkerMaterial);
+            nearPlaneCenterMarker.position.set(0, 0,  -camera.near*2);
+            camera.add(nearPlaneCenterMarker);
+
+            scene.add(camera);
             // Renderer setup
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -344,23 +376,27 @@
                 showMessage("Failed to initialize Earth. Please refresh.", "error", 10000);
             }
 
+
+
             // --- Controls (OrbitControls for camera interaction) ---
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true; // Smooth camera movement
             controls.dampingFactor = 0.05;
             controls.minDistance = EARTH_RADIUS + 0.1; // Prevent zooming inside Earth
             controls.maxDistance = EARTH_RADIUS * SUN_DISTANCE * 1.1; // Adjusted max zoom out
-            controls.enablePan = false; // Disable panning
+            controls.enablePan = true; // Disable panning
 
             // --- UI Event Listeners ---
             zoomInBtn.addEventListener('click', () => zoomCamera(0.8));
             zoomOutBtn.addEventListener('click', () => zoomCamera(1.25));
+            shiftLeftBtn.addEventListener('click', () => shiftEarth(0, 1));
+            shiftRightBtn.addEventListener('click', () => shiftEarth(0, -1));
+            shiftTopBtn.addEventListener('click', () => shiftEarth(1, -1));
+            shiftBotBtn.addEventListener('click', () => shiftEarth(1, 1));
             hideEarthBtn.addEventListener('click', () => {
                 hideEarthBtn.textContent = earthMesh.visible ? "Show" : "Hide";
                 earthMesh.visible = !earthMesh.visible
             });
-            
-
             datePicker.addEventListener('change', () => {
                 syncDaySliderToDate();
                 updateCelestialPositions();
@@ -758,14 +794,48 @@
             }
         }
 
+        function shiftEarth(dir10, dir1_1) {
+            const _panDirectionVector = new THREE.Vector3();
+            const _cameraLocal = new THREE.Vector3();
+            _cameraLocal.setFromMatrixColumn(camera.matrixWorld, dir10);
+            _panDirectionVector.copy(_cameraLocal).multiplyScalar(dir1_1 * CAMERA_SHIFT_AMOUNT);
+            camera.position.add(_panDirectionVector);
+            controls.target.add(_panDirectionVector);
+            controls.update();
+            updateEarthInfo();
+        }
+
         function updateEarthInfo() {
-            const surfacePoint = camera.position.clone().negate().normalize().multiplyScalar(EARTH_RADIUS);
-            let elat = -Math.asin(surfacePoint.y / EARTH_RADIUS) * (180 / Math.PI);
-            let elon = 180 + (Math.atan2(surfacePoint.x, surfacePoint.z) - Math.PI / 2) * (180 / Math.PI);
-            elon = (elon + 540) % 360 - 180;
-            let dist = (camera.position.length() - EARTH_RADIUS) / EARTH_RADIUS * 6378;
-            let infoText = `Earth: ${elat.toFixed(2)}° Lat, ${elon.toFixed(2)}° Lon, ${dist.toFixed(0)} km`;
-            earthInfoDiv.innerHTML = infoText;
+            if (!camera || !controls || !earthMesh) { 
+                earthInfoDiv.innerHTML = "Earth: Data unavailable";
+                return;
+            }
+            let elat = NaN;
+            let elon = NaN;
+
+            camera.getWorldDirection(_viewDirection);
+            _infoRaycaster.set(camera.position, _viewDirection);
+            const intersects = _infoRaycaster.intersectObject(earthMesh, false); // 'false' for non-recursive intersection
+            if (intersects.length > 0) {
+                const intersectionPoint = intersects[0].point; // The closest intersection point on Earth's surface
+                elat = Math.asin(intersectionPoint.y / intersectionPoint.length()) * (180 / Math.PI);
+                elon = (Math.atan2(intersectionPoint.x, intersectionPoint.z) - Math.PI / 2) * (180 / Math.PI);
+                elon = (elon + 540) % 360 - 180; // Normalizes to -180 to +180 range
+            }
+            let dist = (camera.position.length() - EARTH_RADIUS); // Distance in scene units
+            let distKm = (dist / EARTH_RADIUS) * 6378; // Approximate km (if EARTH_RADIUS represents 6378km)
+            if (!isNaN(elat) && !isNaN(elon)) {
+                earthInfoDiv.innerHTML = `Earth: ${elat.toFixed(2)}° Lat, ${elon.toFixed(2)}° Lon, ${distKm.toFixed(0)} km Alt.`;
+            } else {
+                earthInfoDiv.innerHTML = `Earth: (View off globe), Altitude: ${distKm.toFixed(0)} km`;
+            }
+
+            // simplified version without panning
+            // const surfacePoint = camera.position.clone().negate().normalize().multiplyScalar(EARTH_RADIUS);
+            // let elat = -Math.asin(surfacePoint.y / EARTH_RADIUS) * (180 / Math.PI);
+            // let elon = 180 + (Math.atan2(surfacePoint.x, surfacePoint.z) - Math.PI / 2) * (180 / Math.PI);
+            // elon = (elon + 540) % 360 - 180;
+            // let dist = (camera.position.length() - EARTH_RADIUS) / EARTH_RADIUS * 6378;
         }
 
         function zoomCamera(factor) {
