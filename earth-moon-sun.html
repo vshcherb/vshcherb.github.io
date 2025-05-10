@@ -123,8 +123,8 @@
             <div class="button-group">
                 <button id="zoomInBtn">+</button>
                 <button id="zoomOutBtn">-</button>
-                
-                <button id="hideEarthBtn">Hide</button>
+                <button id="hideEarthBtn">Off Earth</button>
+                <button id="surfaceSatelliteBtn">To surface</button> 
             </div>
             <div class="button-group-shift">
                 <button id="shiftLeftBtn">←</button>
@@ -204,6 +204,11 @@
         let _infoRaycaster = new THREE.Raycaster(); // For updateEarthInfo
         let _viewDirection = new THREE.Vector3(); 
         
+        // New global variables for Surface/Satellite mode
+        let isSatelliteViewMode = false;
+        let prevCameraPosition, prevControlsTarget, prevEnablePan;
+        let globalElat = NaN, globalElon = NaN;
+
 
         // --- Constants ---
         const EARTH_RADIUS = 5; // Arbitrary radius for Earth in scene units
@@ -247,6 +252,7 @@
         const messageBox = document.getElementById('messageBox');
         const celestialInfoDiv = document.getElementById('celestialInfo');
         const earthInfoDiv = document.getElementById('earthInfo');
+        const surfaceSatelliteBtn = document.getElementById('surfaceSatelliteBtn'); // New Button
 
         // --- Helper Functions ---
         // Checks if a given year is a leap year
@@ -384,7 +390,7 @@
             controls.dampingFactor = 0.05;
             controls.minDistance = EARTH_RADIUS + 0.1; // Prevent zooming inside Earth
             controls.maxDistance = EARTH_RADIUS * SUN_DISTANCE * 1.1; // Adjusted max zoom out
-            controls.enablePan = true; // Disable panning
+            controls.enablePan = true; // Enable panning (original comment was misleading)
 
             // --- UI Event Listeners ---
             zoomInBtn.addEventListener('click', () => zoomCamera(0.8));
@@ -394,9 +400,10 @@
             shiftTopBtn.addEventListener('click', () => shiftEarth(1, -1));
             shiftBotBtn.addEventListener('click', () => shiftEarth(1, 1));
             hideEarthBtn.addEventListener('click', () => {
-                hideEarthBtn.textContent = earthMesh.visible ? "Show" : "Hide";
+                hideEarthBtn.textContent = earthMesh.visible ? "On Earth" : "Off Earth";
                 earthMesh.visible = !earthMesh.visible
             });
+            surfaceSatelliteBtn.addEventListener('click', toggleSurfaceSatelliteMode); // New listener
             datePicker.addEventListener('change', () => {
                 syncDaySliderToDate();
                 updateCelestialPositions();
@@ -735,15 +742,10 @@
             }
 
             // --- Moon Shadow (Umbra) Logic ---
-              // --- Moon Shadow (Umbra) Logic ---
               if (moonShadowMesh && moonMesh && !subsolarPoint.error && earthMesh && !isNaN(sublunarLatRad) && !isNaN(sublunarLonRad)) {
-                // earthToMoonVecNormalized is the normalized vector from Earth center to Moon
-                // subsolarVec is the normalized vector from Earth center to Sun
-                
-                const angleSunMoon = subsolarVec.angleTo(earthToMoonVecNormalized); // Angle between Sun and Moon vectors as seen from Earth's center
+                const angleSunMoon = subsolarVec.angleTo(earthToMoonVecNormalized); 
 
-                // Check if Moon is roughly between Earth and Sun
-                if (true) { //angleSunMoon < ECLIPSE_THRESHOLD_ANGLE_RAD) {
+                if (true) { 
                     const aLatRad = sublunarLatRad - subsolarPoint.latitude;
                     const aLonRad = sublunarLonRad - subsolarPoint.longitude;
                     const bLonRad = Math.atan(Math.sin(aLonRad)/(SUN_DISTANCE/MOON_DISTANCE - Math.cos(aLonRad)));
@@ -753,20 +755,19 @@
                     eclipseLatDeg = cLatRad * 180 / Math.PI;
                     eclipseLonDeg = cLonRad * 180 / Math.PI;
                     const shadowPosition = new THREE.Vector3();
-                    // Position shadow at sublunar point on Earth's surface
                     shadowPosition.setFromSphericalCoords(
-                        EARTH_RADIUS + 0.045, // Slightly above surface to avoid z-fighting, below other markers
-                        Math.PI / 2 - cLatRad, // Colatitude for shadow
-                        Math.PI / 2 + cLonRad  // Azimuth for shadow
+                        EARTH_RADIUS + 0.045, 
+                        Math.PI / 2 - cLatRad, 
+                        Math.PI / 2 + cLonRad  
                     );
                     moonShadowMesh.position.copy(shadowPosition);
-                    moonShadowMesh.lookAt(earthMesh.position); // Orient shadow to lie flat on sphere
+                    moonShadowMesh.lookAt(earthMesh.position); 
                     moonShadowMesh.visible = true;
                 } else {
-                    moonShadowMesh.visible = false; // Moon not aligned for eclipse
+                    moonShadowMesh.visible = false; 
                 }
             } else if (moonShadowMesh) {
-                moonShadowMesh.visible = false; // Hide shadow if conditions not met
+                moonShadowMesh.visible = false;
             }
 
 
@@ -808,6 +809,7 @@
         function updateEarthInfo() {
             if (!camera || !controls || !earthMesh) { 
                 earthInfoDiv.innerHTML = "Earth: Data unavailable";
+                globalElat = NaN; globalElon = NaN; // Reset global lat/lon
                 return;
             }
             let elat = NaN;
@@ -815,21 +817,25 @@
 
             camera.getWorldDirection(_viewDirection);
             _infoRaycaster.set(camera.position, _viewDirection);
-            const intersects = _infoRaycaster.intersectObject(earthMesh, false); // 'false' for non-recursive intersection
+            const intersects = _infoRaycaster.intersectObject(earthMesh, false); 
             if (intersects.length > 0) {
-                const intersectionPoint = intersects[0].point; // The closest intersection point on Earth's surface
+                const intersectionPoint = intersects[0].point; 
                 elat = Math.asin(intersectionPoint.y / intersectionPoint.length()) * (180 / Math.PI);
                 elon = (Math.atan2(intersectionPoint.x, intersectionPoint.z) - Math.PI / 2) * (180 / Math.PI);
-                elon = (elon + 540) % 360 - 180; // Normalizes to -180 to +180 range
+                elon = (elon + 540) % 360 - 180; 
+                globalElat = elat; // Store lat globally
+                globalElon = elon; // Store lon globally
+            } else {
+                globalElat = NaN; // Camera not pointing at Earth
+                globalElon = NaN;
             }
-            let dist = (camera.position.length() - EARTH_RADIUS); // Distance in scene units
-            let distKm = (dist / EARTH_RADIUS) * 6378; // Approximate km (if EARTH_RADIUS represents 6378km)
-            if (!isNaN(elat) && !isNaN(elon)) {
-                earthInfoDiv.innerHTML = `Earth: ${elat.toFixed(2)}° Lat, ${elon.toFixed(2)}° Lon, ${distKm.toFixed(0)} km Alt.`;
+            let dist = (camera.position.length() - EARTH_RADIUS); 
+            let distKm = (dist / EARTH_RADIUS) * 6378; 
+            if (!isNaN(globalElat) && !isNaN(globalElon)) {
+                earthInfoDiv.innerHTML = `Earth: ${globalElat.toFixed(2)}° Lat, ${globalElon.toFixed(2)}° Lon, ${distKm.toFixed(0)} km Alt.`;
             } else {
                 earthInfoDiv.innerHTML = `Earth: (View off globe), Altitude: ${distKm.toFixed(0)} km`;
             }
-
             // simplified version without panning
             // const surfacePoint = camera.position.clone().negate().normalize().multiplyScalar(EARTH_RADIUS);
             // let elat = -Math.asin(surfacePoint.y / EARTH_RADIUS) * (180 / Math.PI);
@@ -837,6 +843,14 @@
             // elon = (elon + 540) % 360 - 180;
             // let dist = (camera.position.length() - EARTH_RADIUS) / EARTH_RADIUS * 6378;
         }
+
+        // New function to toggle Surface/Satellite view
+        function toggleSurfaceSatelliteMode() {
+            if (!earthMesh || !camera || !controls) return;
+            surfaceSatelliteBtn.textContent = isSatelliteViewMode ? "To Satellite" : "To Surface";
+            updateEarthInfo(); // Ensure globalElat, globalElon are fresh
+        }
+
 
         function zoomCamera(factor) {
             const currentDistance = camera.position.length();
