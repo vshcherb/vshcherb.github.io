@@ -124,7 +124,7 @@
                 <button id="zoomInBtn">+</button>
                 <button id="zoomOutBtn">-</button>
                 <button id="hideEarthBtn">Off Earth</button>
-                <button id="surfaceSatelliteBtn">To surface</button> 
+                <button id="surfaceSatelliteBtn">To Surface</button> 
             </div>
             <div class="button-group-shift">
                 <button id="shiftLeftBtn">←</button>
@@ -197,21 +197,26 @@
         let sunMesh; // Mesh for the Sun globe
         let sunProjectionMesh; // Mesh to show subsolar point
         let northPoleMeshGlobal, southPoleMeshGlobal; // Meshes for polar caps
-        let currentTileZoomLevel = 4; // Initial tile zoom level for map
+        let currentTileZoomLevel = 3; // Initial tile zoom level for map
         let moonShadowMesh; // Mesh for the Moon's umbra (shadow)
         let currentMoonDistanceFactor = 1.0;
         let currentSunDistanceFactor = 1.0;
         let _infoRaycaster = new THREE.Raycaster(); // For updateEarthInfo
         let _viewDirection = new THREE.Vector3(); 
         
-        // New global variables for Surface/Satellite mode
-        let isSatelliteViewMode = false;
-        let prevCameraPosition, prevControlsTarget, prevEnablePan;
+        // global variables for Surface/Satellite mode
+        let isSatelliteViewMode = true;
         let globalElat = NaN, globalElon = NaN;
-
-
+        let subsolarPoint;
+        let isDragging = false, previousMouseX = 0, previousMouseY = 0, initialSpherical = new THREE.Spherical();
+        let rotationQuaternion = new THREE.Quaternion(), surfaceNormal;
         // --- Constants ---
+        const FOV = 45;
         const EARTH_RADIUS = 5; // Arbitrary radius for Earth in scene units
+        const EARTH_RADIUS_KM = 6378;
+        const SURFACE_ALTITUDE = 200 * EARTH_RADIUS / EARTH_RADIUS_KM + EARTH_RADIUS;  // 200 km
+        const DEFAULT_ALTITUDE = 5 * EARTH_RADIUS; 
+        const LOOK_AT_DISTANCE = 50 * EARTH_RADIUS; 
         const CAMERA_SHIFT_AMOUNT = EARTH_RADIUS / 5;
         const MOON_DISTANCE = 60.3; // Actual average distance from Earth to Moon in Earth radii
         const SUN_DISTANCE = 23460; // Actual average distance from Earth to Sun in Earth radii
@@ -289,8 +294,8 @@
             scene.background = new THREE.Color(0x050510); // Dark space background
 
             // Camera setup
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, EARTH_RADIUS * SUN_DISTANCE * 1.2); // Adjusted far plane
-            camera.position.set(0, 0, EARTH_RADIUS * 5); // Initial camera position
+            camera = new THREE.PerspectiveCamera(FOV, window.innerWidth / window.innerHeight, 0.1, EARTH_RADIUS * SUN_DISTANCE * 1.2); // Adjusted far plane
+            camera.position.set(0, 0, DEFAULT_ALTITUDE); // Initial camera position
             camera.lookAt(0, 0, 0); // Look at the center of the scene (Earth)
 
             const nearPlaneCenterMarkerGeometry = new THREE.CircleGeometry(0.001, 16); 
@@ -399,6 +404,19 @@
             shiftRightBtn.addEventListener('click', () => shiftEarth(0, -1));
             shiftTopBtn.addEventListener('click', () => shiftEarth(1, -1));
             shiftBotBtn.addEventListener('click', () => shiftEarth(1, 1));
+            window.addEventListener('keydown', (event) => {
+                if (!isSatelliteViewMode) {
+                    if (event.key === 'ArrowLeft') {
+                        shiftEarth(0, 1); 
+                    } else if (event.key === 'ArrowRight') {
+                        shiftEarth(0, -1); 
+                    } else if (event.key === 'ArrowUp') {
+                        shiftEarth(1, -1); 
+                    } else if (event.key === 'ArrowDown') {
+                        shiftEarth(1, 1); 
+                    }
+                }
+            });
             hideEarthBtn.addEventListener('click', () => {
                 hideEarthBtn.textContent = earthMesh.visible ? "On Earth" : "Off Earth";
                 earthMesh.visible = !earthMesh.visible
@@ -445,7 +463,33 @@
                 updateCelestialPositions();
             });
 
+            document.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                previousMouseX = e.clientX;
+                previousMouseY = e.clientY;
+                let currentLookAtPoint = new THREE.Vector3();
+                camera.getWorldDirection(currentLookAtPoint);
+                initialSpherical.setFromVector3(currentLookAtPoint);
+                // initialSpherical.phi = Math.PI - initialSpherical.phi ;
+                //initialSpherical.phi += Math.PI/2;
+                // initialSpherical.phi -= Math.PI/2;
+                console.log("I "+ (initialSpherical.phi / Math.PI * 180) + " " + (initialSpherical.theta / Math.PI * 180));
+            });
 
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                let currentLookAtPoint = new THREE.Vector3();
+                camera.getWorldDirection(currentLookAtPoint);
+                initialSpherical.setFromVector3(currentLookAtPoint);
+                console.log("F "+ (initialSpherical.phi / Math.PI * 180) + " " + (initialSpherical.theta / Math.PI * 180));
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging || isSatelliteViewMode) return;
+                const deltaX = e.clientX - previousMouseX;
+                const deltaY = e.clientY - previousMouseY;
+                rotateSkyInSurfaceMode(deltaX, deltaY);
+            });
             window.addEventListener('resize', onWindowResize);
             controls.addEventListener('change', function() {
                 updateEarthInfo();
@@ -646,7 +690,7 @@
             ));
 
             // --- Update Sun ---
-            const subsolarPoint = getSunGeographicPosition(currentDate);
+            subsolarPoint = getSunGeographicPosition(currentDate);
             let subsolarLatDeg = NaN;
             let subsolarLonDeg = NaN;
             let subsolarVec = new THREE.Vector3(1, 0, 0);
@@ -796,13 +840,18 @@
         }
 
         function shiftEarth(dir10, dir1_1) {
-            const _panDirectionVector = new THREE.Vector3();
-            const _cameraLocal = new THREE.Vector3();
-            _cameraLocal.setFromMatrixColumn(camera.matrixWorld, dir10);
-            _panDirectionVector.copy(_cameraLocal).multiplyScalar(dir1_1 * CAMERA_SHIFT_AMOUNT);
-            camera.position.add(_panDirectionVector);
-            controls.target.add(_panDirectionVector);
-            controls.update();
+            if (isSatelliteViewMode) {
+                const _panDirectionVector = new THREE.Vector3();
+                const _cameraLocal = new THREE.Vector3();
+                _cameraLocal.setFromMatrixColumn(camera.matrixWorld, dir10);
+                _panDirectionVector.copy(_cameraLocal).multiplyScalar(dir1_1 * CAMERA_SHIFT_AMOUNT);
+                camera.position.add(_panDirectionVector);
+                controls.target.add(_panDirectionVector);
+                controls.update();
+            } else {
+                const sense = 50;
+                rotateSkyInSurfaceMode(dir10 == 0 ? dir1_1 * sense : 0, dir10 == 1 ? dir1_1 * sense: 0)
+            }
             updateEarthInfo();
         }
 
@@ -830,7 +879,7 @@
                 globalElon = NaN;
             }
             let dist = (camera.position.length() - EARTH_RADIUS); 
-            let distKm = (dist / EARTH_RADIUS) * 6378; 
+            let distKm = (dist / EARTH_RADIUS) * EARTH_RADIUS_KM; 
             if (!isNaN(globalElat) && !isNaN(globalElon)) {
                 earthInfoDiv.innerHTML = `Earth: ${globalElat.toFixed(2)}° Lat, ${globalElon.toFixed(2)}° Lon, ${distKm.toFixed(0)} km Alt.`;
             } else {
@@ -844,13 +893,90 @@
             // let dist = (camera.position.length() - EARTH_RADIUS) / EARTH_RADIUS * 6378;
         }
 
-        // New function to toggle Surface/Satellite view
-        function toggleSurfaceSatelliteMode() {
-            if (!earthMesh || !camera || !controls) return;
-            surfaceSatelliteBtn.textContent = isSatelliteViewMode ? "To Satellite" : "To Surface";
-            updateEarthInfo(); // Ensure globalElat, globalElon are fresh
+        function rotateSkyInSurfaceMode(deltaX, deltaY) {
+            const sensitivity = (2 * Math.tan(FOV/2 * Math.PI/180)) / window.innerHeight;
+            //const currentSpherical = initialSpherical.clone();
+            //currentSpherical.phi += deltaY * sensitivity;
+            //currentSpherical.theta += deltaX * sensitivity; // Horizontal rotation
+            
+            // console.log(currentSpherical.phi / Math.PI * 180);
+            // console.log(currentSpherical.theta / Math.PI * 180);
+            // if(currentSpherical.phi < Math.PI/2) {
+            //     currentSpherical.phi = Math.PI/2;
+            // }
+            // console.log("M "+ (currentSpherical.phi / Math.PI * 180) + " " + (currentSpherical.theta / Math.PI * 180));
+            // const newLookAt = new THREE.Vector3().setFromSpherical(currentSpherical)
+            //                     .add(camera.position.clone().negate());
+            // camera.lookAt(newLookAt);
+
+            
+            // Get current look direction
+            const lookDirection = new THREE.Vector3();
+            camera.getWorldDirection(lookDirection);
+            // Rotate direction into local frame (Y-axis aligned with surface normal)
+            const localLookDir = lookDirection.clone().applyQuaternion(rotationQuaternion);
+            // Convert to local spherical coordinates
+            const localSpherical = new THREE.Spherical().setFromVector3(localLookDir);
+            if (localSpherical.phi < 0.001 * Math.PI) {
+                localSpherical.theta = 0;
+            }
+            // Adjust angles based on mouse movement
+            localSpherical.theta -= deltaX * sensitivity; // Azimuth
+            localSpherical.phi = Math.max(0, Math.min(Math.PI, localSpherical.phi - deltaY * sensitivity));
+            console.log("L "+ (localSpherical.phi / Math.PI * 180) + " " + (localSpherical.theta / Math.PI * 180));            
+            // Convert back to local direction
+            const newLocalLookDir = new THREE.Vector3().setFromSpherical(localSpherical);
+            // Rotate back to global frame
+            const newGlobalLookDir = newLocalLookDir.applyQuaternion(rotationQuaternion.clone().invert());    
+            // Calculate target point and update camera
+            const targetPoint = camera.position.clone().add(newGlobalLookDir);
+            camera.lookAt(targetPoint);
+            camera.up.copy(surfaceNormal.clone().negate()); 
+
+
+            let currentLookAtPoint = new THREE.Vector3();
+            camera.getWorldDirection(currentLookAtPoint);
+            initialSpherical.setFromVector3(currentLookAtPoint);
+            console.log("MF "+ (initialSpherical.phi / Math.PI * 180) + " " + (initialSpherical.theta / Math.PI * 180));
         }
 
+        function toggleSurfaceSatelliteMode() {
+            if (isNaN(globalElat)) {
+                showMessage("Not pointing at Earth surface", "error", 2000);
+                return;
+            }
+            surfaceSatelliteBtn.textContent = !isSatelliteViewMode ?  "To Surface" : "To Satellite";
+            isSatelliteViewMode = !isSatelliteViewMode;
+            const phi = (90 - globalElat) * Math.PI / 180;
+            const theta = (globalElon + 90) * Math.PI / 180;
+            const surfacePoint = new THREE.Vector3().setFromSphericalCoords(EARTH_RADIUS, phi, theta).normalize();
+            if (!isSatelliteViewMode) {
+                // Position camera at surface
+                camera.position.copy(surfacePoint.multiplyScalar(SURFACE_ALTITUDE));
+                surfaceNormal = new THREE.Vector3().copy(surfacePoint).normalize();
+                rotationQuaternion.setFromUnitVectors(surfaceNormal, new THREE.Vector3(0, -1, 0));
+                // Look straight down
+                camera.lookAt(camera.position.clone().add(surfaceNormal.negate()));
+
+                // TEST everything correct
+                const lookDirection = new THREE.Vector3();
+                camera.getWorldDirection(lookDirection);
+                // Rotate direction into local frame (Y-axis aligned with surface normal)
+                const localLookDir = lookDirection.clone().applyQuaternion(rotationQuaternion);
+                // Convert to local spherical coordinates
+                const localSpherical = new THREE.Spherical().setFromVector3(localLookDir);
+                console.log("L "+ (localSpherical.phi / Math.PI * 180) + " " + (localSpherical.theta / Math.PI * 180));
+
+            } else {
+                camera.position.copy(surfacePoint.multiplyScalar(DEFAULT_ALTITUDE));
+                camera.lookAt(0, 0, 0);
+            }
+            controls.enabled = isSatelliteViewMode;
+            controls.enablePan = isSatelliteViewMode;
+            controls.enableZoom = isSatelliteViewMode;
+            controls.enableRotate = isSatelliteViewMode;
+            updateEarthInfo();
+        }
 
         function zoomCamera(factor) {
             const currentDistance = camera.position.length();
@@ -883,7 +1009,9 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            controls.update();
+            if (isSatelliteViewMode) {
+                controls.update();
+            }
             renderer.render(scene, camera);
         }
 
