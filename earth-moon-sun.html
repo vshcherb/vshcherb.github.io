@@ -155,7 +155,7 @@
             <label for="tileZoomSlider">Map Tile Zoom (z):</label>
             <div>
                 <input type="range" id="tileZoomSlider" min="3" max="6" value="3">
-                <span id="tileZoomValue">3</span>
+                <span id="tileZoomValue">4</span>
             </div>
         </div>
         <div class="control-group">
@@ -197,7 +197,7 @@
         let sunMesh; // Mesh for the Sun globe
         let sunProjectionMesh; // Mesh to show subsolar point
         let northPoleMeshGlobal, southPoleMeshGlobal; // Meshes for polar caps
-        let currentTileZoomLevel = 3; // Initial tile zoom level for map
+        let currentTileZoomLevel = 4; // Initial tile zoom level for map
         let moonShadowMesh; // Mesh for the Moon's umbra (shadow)
         let currentMoonDistanceFactor = 1.0;
         let currentSunDistanceFactor = 1.0;
@@ -208,7 +208,7 @@
         let isSatelliteViewMode = true;
         let globalElat = NaN, globalElon = NaN;
         let subsolarPoint;
-        let isDragging = false, previousMouseX = 0, previousMouseY = 0, initialSpherical = new THREE.Spherical();
+        let isDragging = false, previousMouseX = 0, previousMouseY = 0;
         let rotationQuaternion = new THREE.Quaternion(), surfaceNormal;
         // --- Constants ---
         const FOV = 45;
@@ -467,21 +467,10 @@
                 isDragging = true;
                 previousMouseX = e.clientX;
                 previousMouseY = e.clientY;
-                let currentLookAtPoint = new THREE.Vector3();
-                camera.getWorldDirection(currentLookAtPoint);
-                initialSpherical.setFromVector3(currentLookAtPoint);
-                // initialSpherical.phi = Math.PI - initialSpherical.phi ;
-                //initialSpherical.phi += Math.PI/2;
-                // initialSpherical.phi -= Math.PI/2;
-                console.log("I "+ (initialSpherical.phi / Math.PI * 180) + " " + (initialSpherical.theta / Math.PI * 180));
             });
 
             document.addEventListener('mouseup', () => {
                 isDragging = false;
-                let currentLookAtPoint = new THREE.Vector3();
-                camera.getWorldDirection(currentLookAtPoint);
-                initialSpherical.setFromVector3(currentLookAtPoint);
-                console.log("F "+ (initialSpherical.phi / Math.PI * 180) + " " + (initialSpherical.theta / Math.PI * 180));
             });
 
             document.addEventListener('mousemove', (e) => {
@@ -923,7 +912,7 @@
             // Adjust angles based on mouse movement
             localSpherical.theta -= deltaX * sensitivity; // Azimuth
             localSpherical.phi = Math.max(0, Math.min(Math.PI, localSpherical.phi - deltaY * sensitivity));
-            console.log("L "+ (localSpherical.phi / Math.PI * 180) + " " + (localSpherical.theta / Math.PI * 180));            
+            //console.log("L "+ (localSpherical.phi / Math.PI * 180) + " " + (localSpherical.theta / Math.PI * 180));            
             // Convert back to local direction
             const newLocalLookDir = new THREE.Vector3().setFromSpherical(localSpherical);
             // Rotate back to global frame
@@ -934,10 +923,10 @@
             camera.up.copy(surfaceNormal.clone().negate()); 
 
 
-            let currentLookAtPoint = new THREE.Vector3();
-            camera.getWorldDirection(currentLookAtPoint);
-            initialSpherical.setFromVector3(currentLookAtPoint);
-            console.log("MF "+ (initialSpherical.phi / Math.PI * 180) + " " + (initialSpherical.theta / Math.PI * 180));
+            // let currentLookAtPoint = new THREE.Vector3();
+            // camera.getWorldDirection(currentLookAtPoint);
+            // initialSpherical.setFromVector3(currentLookAtPoint);
+            // console.log("M "+ (initialSpherical.phi / Math.PI * 180) + " " + (initialSpherical.theta / Math.PI * 180));            
         }
 
         function toggleSurfaceSatelliteMode() {
