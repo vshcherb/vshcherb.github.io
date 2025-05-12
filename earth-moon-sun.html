@@ -216,7 +216,7 @@
         /// 3D
         let scene, camera, renderer, controls ;
         let sunMesh, sunProjectionMesh, sunLight; 
-        let moonMesh, moonProjectionMesh, moonShadowMesh;
+        let moonMesh, moonProjectionMesh, moonShadowMesh, moonPosGeo;
         let earthMesh, northPoleMeshGlobal, southPoleMeshGlobal; 
         let moonDistFactor = 1.0, sunDistFactor = 1.0, moonScaleFactor = 1.0, sunScaleFactor = 1.0;
 
@@ -231,10 +231,11 @@
         const DEFAULT_ALTITUDE = 5 * EARTH_RADIUS; 
         const LOOK_AT_DISTANCE = 50 * EARTH_RADIUS; 
         const CAMERA_SHIFT_AMOUNT = EARTH_RADIUS / 5;
-        const MOON_DISTANCE = 60.3; // Actual average distance from Earth to Moon in Earth radii
-        const SUN_DISTANCE = 23460; // Actual average distance from Earth to Sun in Earth radii
+        const MOON_DISTANCE = 60.3; // Actual average distance from Earth to Moon in Earth radii (used for camera controls, actual distance is dynamic)
+        const SUN_DISTANCE = 23460; // Actual average distance from Earth to Sun in Earth radii (used for camera controls, actual distance is dynamic)
         const MOON_RADIUS = EARTH_RADIUS / 3.67; // Relative Moon radius
         const SUN_RADIUS_IN_EARTH_RADII = 109.0; // Sun's radius relative to Earth's radius
+        const AU_IN_EARTH_RADII = 149597870.7 / EARTH_RADIUS_KM; // Approx 23455.9 Earth Radii for 1 AU
         // VISUAL_MOON_DISTANCE_FACTOR is now replaced by dynamic slider
 
         // Constants for Moon's Umbra (shadow)
@@ -297,7 +298,7 @@
             return new Date(date.setUTCDate(day)); // Set the day of the year
         }
 
-        // Formats a Date object into YYYY-MM-DD string
+        // Formats a Date object into yyyy-MM-DD string
         function formatDate(date) {
             const yyyy = date.getUTCFullYear();
             const mm = String(date.getUTCMonth() + 1).padStart(2, '0'); // Months are 0-indexed
@@ -675,7 +676,14 @@
             let alpha_normalized_rad = alpha_rad; if (alpha_normalized_rad < 0) alpha_normalized_rad += 2 * Math.PI;
             let subsolarLon_rad = alpha_normalized_rad - gmst_rad;
             while (subsolarLon_rad > Math.PI) subsolarLon_rad -= 2 * Math.PI; while (subsolarLon_rad < -Math.PI) subsolarLon_rad += 2 * Math.PI;
-            return { latitude: subsolarLat_rad, longitude: subsolarLon_rad };
+            
+            // Calculate Sun-Earth distance using elliptic orbit formula (approximation)
+            // R_AU = 1.00014 - 0.01671 * cos(M_rad) - 0.00014 * cos(2 * M_rad)
+            const e_earth = 0.01671; // Earth's orbital eccentricity (approx)
+            const R_AU = 1.00014 - e_earth * Math.cos(M_rad) - 0.00014 * Math.cos(2 * M_rad);
+            const sunDistanceER = R_AU * AU_IN_EARTH_RADII;
+
+            return { latitude: subsolarLat_rad, longitude: subsolarLon_rad, distance: sunDistanceER, error: null };
         }
 
         // --- Moon Position Calculation ---
@@ -689,8 +697,9 @@
             const M_prime_rad = M_prime_deg * Math.PI / 180; const F_rad = F_deg * Math.PI / 180; const D_rad = D_deg * Math.PI / 180; const M_sun_rad = M_sun_deg * Math.PI / 180; const L_prime_rad = L_prime_deg * Math.PI / 180;
             let sum_lon = 0; sum_lon += +6.288774 * Math.sin(M_prime_rad); sum_lon += -1.274027 * Math.sin(M_prime_rad - 2 * D_rad); sum_lon += +0.658314 * Math.sin(2 * D_rad); sum_lon += +0.213618 * Math.sin(2 * M_prime_rad); sum_lon += -0.185116 * Math.sin(M_sun_rad); sum_lon += -0.114332 * Math.sin(2 * F_rad);
             let sum_lat = 0; sum_lat += +5.128122 * Math.sin(F_rad); sum_lat += +0.280602 * Math.sin(M_prime_rad + F_rad); sum_lat += +0.277693 * Math.sin(M_prime_rad - F_rad); sum_lat += +0.173237 * Math.sin(2*D_rad - F_rad);
-            let sum_dist = 0; sum_dist += -0.58 * Math.cos(M_prime_rad); sum_dist += -0.16 * Math.cos(M_prime_rad - 2*D_rad);
-            const lambda_moon_rad = L_prime_rad + sum_lon * Math.PI / 180; const beta_moon_rad = sum_lat * Math.PI / 180; const distance_moon_ER = 60.2666 + sum_dist;
+            let sum_dist = 0; sum_dist += -0.58 * Math.cos(M_prime_rad); sum_dist += -0.16 * Math.cos(M_prime_rad - 2*D_rad); // These terms adjust for elliptical orbit + perturbations
+            const distance_moon_ER = 60.2666 + sum_dist; // Mean distance (60.2666 ER) + perturbations
+            const lambda_moon_rad = L_prime_rad + sum_lon * Math.PI / 180; const beta_moon_rad = sum_lat * Math.PI / 180; 
             const epsilon_deg = (23.439291 - 0.0130042 * T - 0.00000016 * T * T + 0.000000504 * T * T * T); const epsilon_rad = epsilon_deg * Math.PI / 180;
             const sin_epsilon = Math.sin(epsilon_rad); const cos_epsilon = Math.cos(epsilon_rad); const sin_lambda = Math.sin(lambda_moon_rad); const cos_lambda = Math.cos(lambda_moon_rad); const sin_beta = Math.sin(beta_moon_rad); const cos_beta = Math.cos(beta_moon_rad);
             const alpha_m_rad = Math.atan2(sin_lambda * cos_epsilon - Math.tan(beta_moon_rad) * sin_epsilon, cos_lambda);
@@ -712,29 +721,32 @@
             ));
 
             // --- Update Sun ---
-            subsolarPoint = getSunGeographicPosition(currentDate);
+            const sunData = getSunGeographicPosition(currentDate);
+            subsolarPoint = { latitude: sunData.latitude, longitude: sunData.longitude }; // Keep subsolarPoint structure for compatibility if used elsewhere
+            let actualSunDistanceER = sunData.distance; // This is in Earth Radii
+
             let subsolarLatDeg = NaN;
             let subsolarLonDeg = NaN;
             let subsolarVec = new THREE.Vector3(1, 0, 0);
 
-             if (subsolarPoint.error) {
+             if (sunData.error) { // Check if getSunGeographicPosition itself had an error
                  console.error("Cannot update sun projection due to error in getSunGeographicPosition.");
                  if (sunProjectionMesh) sunProjectionMesh.visible = false;
                  if (sunMesh) sunMesh.visible = false;
              } else {
-                 subsolarLatDeg = subsolarPoint.latitude * 180 / Math.PI;
-                 subsolarLonDeg = subsolarPoint.longitude * 180 / Math.PI;
+                 subsolarLatDeg = sunData.latitude * 180 / Math.PI;
+                 subsolarLonDeg = sunData.longitude * 180 / Math.PI;
                  const sunDirection = new THREE.Vector3();
-                 sunDirection.setFromSphericalCoords(1, Math.PI/2 - subsolarPoint.latitude,  Math.PI/2 + subsolarPoint.longitude);
+                 sunDirection.setFromSphericalCoords(1, Math.PI/2 - sunData.latitude,  Math.PI/2 + sunData.longitude);
                  subsolarVec.copy(sunDirection);
 
-                 // Sun light position (far away, based on actual direction)
-                 sunLight.position.copy(sunDirection.clone().multiplyScalar(EARTH_RADIUS * SUN_DISTANCE)); // Light source at realistic distance/direction
+                 // Sun light position (far away, based on actual direction and distance)
+                 sunLight.position.copy(sunDirection.clone().multiplyScalar(EARTH_RADIUS * actualSunDistanceER)); 
                  sunLight.target = earthMesh;
 
                  // Update Sun Globe position
                  if (sunMesh) {
-                    const visualSunDistance = (EARTH_RADIUS * SUN_DISTANCE) / sunDistFactor;
+                    const visualSunDistance = (EARTH_RADIUS * actualSunDistanceER) / sunDistFactor;
                     sunMesh.position.copy(sunDirection.clone().multiplyScalar(visualSunDistance));
                     sunMesh.scale.set(sunScaleFactor, sunScaleFactor, sunScaleFactor);
                     sunMesh.lookAt(earthMesh.position); // Optional: make it face Earth
@@ -745,8 +757,8 @@
                  if (sunProjectionMesh) {
                      const projectionPosition = new THREE.Vector3();
                      projectionPosition.setFromSphericalCoords(EARTH_RADIUS + 0.03,
-                            Math.PI / 2 - subsolarPoint.latitude,
-                            Math.PI / 2 + subsolarPoint.longitude);
+                            Math.PI / 2 - sunData.latitude,
+                            Math.PI / 2 + sunData.longitude);
                      sunProjectionMesh.position.copy(projectionPosition);
                      sunProjectionMesh.lookAt(earthMesh.position);
                      sunProjectionMesh.visible = true;
@@ -764,8 +776,9 @@
             let earthToMoonVecNormalized = new THREE.Vector3(0, 1, 0);
 
             if (moonMesh) {
-                const moonPosGeo = getMoonPosition(currentDate);
-                const visualMoonDistance = (EARTH_RADIUS * MOON_DISTANCE) / moonDistFactor; // Use MOON_DISTANCE (actual) and factor
+                moonPosGeo = getMoonPosition(currentDate);
+                const actualMoonDistanceER = moonPosGeo.distance; // Already in Earth Radii from getMoonPosition
+                const visualMoonDistance = (EARTH_RADIUS * actualMoonDistanceER) / moonDistFactor; 
 
                 const jday_UT = getJulianDate(currentDate);
                 const gmst_deg = getGMST(jday_UT);
@@ -781,9 +794,9 @@
                 sublunarLonDeg = sublunarLonRad * 180 / Math.PI;
 
                 moonCartesian.setFromSphericalCoords(
-                    visualMoonDistance,
+                    visualMoonDistance, // Use the visual distance calculated with the factor
                     Math.PI / 2 - moonPosGeo.declination,
-                    Math.PI / 2  + sublunarLonRad
+                    Math.PI / 2  + sublunarLonRad 
                 );
                 moonMesh.position.copy(moonCartesian);
                 moonMesh.scale.set(moonScaleFactor, moonScaleFactor, moonScaleFactor);
@@ -809,16 +822,21 @@
             }
 
             // --- Moon Shadow (Umbra) Logic ---
-              if (moonShadowMesh && moonMesh && !subsolarPoint.error && earthMesh && !isNaN(sublunarLatRad) && !isNaN(sublunarLonRad)) {
+            // Note: SUN_DISTANCE used in this shadow calculation should ideally also be dynamic.
+            // For simplicity and as it's a visual approximation, we might leave it or use actualSunDistanceER.
+            // Let's use actualSunDistanceER for consistency.
+              if (moonShadowMesh && moonMesh && !sunData.error && earthMesh && !isNaN(sublunarLatRad) && !isNaN(sublunarLonRad) && actualSunDistanceER && moonPosGeo.distance) {
                 const angleSunMoon = subsolarVec.angleTo(earthToMoonVecNormalized); 
 
-                if (true) { 
-                    const aLatRad = sublunarLatRad - subsolarPoint.latitude;
-                    const aLonRad = sublunarLonRad - subsolarPoint.longitude;
-                    const bLonRad = Math.atan(Math.sin(aLonRad)/(SUN_DISTANCE/MOON_DISTANCE - Math.cos(aLonRad)));
-                    const bLatRad = Math.atan(Math.sin(aLatRad)/(SUN_DISTANCE/MOON_DISTANCE - Math.cos(aLatRad)));
-                    const cLatRad = Math.asin(SUN_DISTANCE*(1-1/SUN_DISTANCE)*Math.tan(bLatRad));
-                    const cLonRad = Math.asin(SUN_DISTANCE*(1-1/SUN_DISTANCE)*Math.tan(bLonRad));
+                if (true) { // Forcing shadow calculation, threshold check might be removed or adjusted
+                    const sunDistRatio = actualSunDistanceER / moonPosGeo.distance; // Ratio of actual distances
+                    const aLatRad = sublunarLatRad - sunData.latitude;
+                    const aLonRad = sublunarLonRad - sunData.longitude;
+                    const bLonRad = Math.atan(Math.sin(aLonRad)/(sunDistRatio - Math.cos(aLonRad)));
+                    const bLatRad = Math.atan(Math.sin(aLatRad)/(sunDistRatio - Math.cos(aLatRad)));
+                    const cLatRad = Math.asin(actualSunDistanceER*(1-1/actualSunDistanceER)*Math.tan(bLatRad)); 
+                    const cLonRad = Math.asin(actualSunDistanceER*(1-1/actualSunDistanceER)*Math.tan(bLonRad)); 
+                    
                     eclipseLatDeg = cLatRad * 180 / Math.PI;
                     eclipseLonDeg = cLonRad * 180 / Math.PI;
                     const shadowPosition = new THREE.Vector3();
@@ -842,13 +860,15 @@
             if (celestialInfoDiv) {
                 let infoText = "";
                 if (!isNaN(subsolarLatDeg)) {
-                    infoText += `Subsolar: ${subsolarLatDeg.toFixed(2)}° Lat, ${subsolarLonDeg.toFixed(2)}° Lon`;
+                    infoText += `Sun: ${subsolarLatDeg.toFixed(2)}° Lat, ${subsolarLonDeg.toFixed(2)}° Lon,
+                         ${(actualSunDistanceER / AU_IN_EARTH_RADII / sunDistFactor).toFixed(2)} AU`;
                 } else {
                     infoText += "Subsolar: Error";
                 }
                 infoText += "<br>";
-                 if (!isNaN(sublunarLatDeg)) {
-                    infoText += `Sublunar: ${sublunarLatDeg.toFixed(2)}° Lat, ${sublunarLonDeg.toFixed(2)}° Lon`;
+                 if (!isNaN(sublunarLatDeg) && moonPosGeo) {
+                    infoText += `Moon: ${sublunarLatDeg.toFixed(2)}° Lat, ${sublunarLonDeg.toFixed(2)}° Lon, 
+                                ${(moonPosGeo.distance / moonDistFactor).toFixed(2)} ER`;
                 } else {
                     infoText += "Sublunar: Calculating...";
                 }
