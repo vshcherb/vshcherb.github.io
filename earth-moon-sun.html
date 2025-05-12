@@ -821,14 +821,36 @@
                  if (moonProjectionMesh) moonProjectionMesh.visible = false;
             }
 
-            // --- Moon Shadow (Umbra) Logic ---
-            // Note: SUN_DISTANCE used in this shadow calculation should ideally also be dynamic.
-            // For simplicity and as it's a visual approximation, we might leave it or use actualSunDistanceER.
-            // Let's use actualSunDistanceER for consistency.
-              if (moonShadowMesh && moonMesh && !sunData.error && earthMesh && !isNaN(sublunarLatRad) && !isNaN(sublunarLonRad) && actualSunDistanceER && moonPosGeo.distance) {
+            // --- Shadow where center of Sun hidden by Moon ---
+            if (moonShadowMesh && moonMesh && !sunData.error && earthMesh && !isNaN(sublunarLatRad) && !isNaN(sublunarLonRad)) {
                 const angleSunMoon = subsolarVec.angleTo(earthToMoonVecNormalized); 
-
-                if (true) { // Forcing shadow calculation, threshold check might be removed or adjusted
+                const sunPos = sunMesh.position;
+                const moonPos = moonMesh.position;
+                const direction = new THREE.Vector3();
+                direction.subVectors(moonPos, sunPos).normalize();
+                const raycaster = new THREE.Raycaster(moonPos, direction);
+                const intersects = raycaster.intersectObject(earthMesh, false); // 'false' means don't check children
+                eclipseLatDeg = NaN;
+                eclipseLonDeg = NaN;
+                moonShadowMesh.visible = false; 
+                if (intersects.length > 0) {
+                    const intersectionPoint = intersects[0].point;
+                    const latitudeRad = Math.asin(intersectionPoint.y / intersectionPoint.length());
+                    let longitudeRad = Math.atan2(intersectionPoint.x, intersectionPoint.z) - Math.PI / 2;
+                        // Convert radians to degrees
+                    eclipseLatDeg = latitudeRad * (180 / Math.PI);
+                    eclipseLonDeg = longitudeRad * (180 / Math.PI);
+                    eclipseLonDeg = (eclipseLonDeg + 540) % 360 - 180;
+                    const shadowPosition = new THREE.Vector3();
+                    shadowPosition.setFromSphericalCoords(
+                        EARTH_RADIUS + 0.045, 
+                        Math.PI / 2 - latitudeRad, 
+                        Math.PI / 2 + longitudeRad  
+                    );
+                    moonShadowMesh.position.copy(shadowPosition);
+                    moonShadowMesh.lookAt(earthMesh.position); 
+                    moonShadowMesh.visible = true;
+                } else if (false) { // Simple method
                     const sunDistRatio = actualSunDistanceER / moonPosGeo.distance; // Ratio of actual distances
                     const aLatRad = sublunarLatRad - sunData.latitude;
                     const aLonRad = sublunarLonRad - sunData.longitude;
@@ -848,11 +870,7 @@
                     moonShadowMesh.position.copy(shadowPosition);
                     moonShadowMesh.lookAt(earthMesh.position); 
                     moonShadowMesh.visible = true;
-                } else {
-                    moonShadowMesh.visible = false; 
                 }
-            } else if (moonShadowMesh) {
-                moonShadowMesh.visible = false;
             }
 
 
