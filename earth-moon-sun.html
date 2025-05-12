@@ -498,7 +498,7 @@
             });
 
             document.addEventListener('mousedown', (e) => {
-                // isDragging = true;
+                isDragging = true;
                 previousMouseX = e.clientX;
                 previousMouseY = e.clientY;
             });
@@ -511,7 +511,7 @@
                 if (!isDragging || isSatelliteViewMode) return;
                 const deltaX = e.clientX - previousMouseX;
                 const deltaY = e.clientY - previousMouseY;
-                rotateSkyInSurfaceMode(deltaX, deltaY);
+                rotateSkyInSurfaceMode(deltaX / 20, -deltaY / 20);
             });
             window.addEventListener('resize', onWindowResize);
             controls.addEventListener('change', function() {
