@@ -154,7 +154,7 @@
         <div class="control-group">
             <label for="tileZoomSlider">Map Tile Zoom (z):</label>
             <div>
-                <input type="range" id="tileZoomSlider" min="3" max="6" value="3">
+                <input type="range" id="tileZoomSlider" min="3" max="6" value="4">
                 <span id="tileZoomValue" class="controlfield">4</span>
             </div>
         </div>
@@ -312,11 +312,11 @@
             scene.background = new THREE.Color(0x050510); // Dark space background
 
             // Camera setup
-            camera = new THREE.PerspectiveCamera(FOV, window.innerWidth / window.innerHeight, 0.1, EARTH_RADIUS * SUN_DISTANCE * 1.2); // Adjusted far plane
+            camera = new THREE.PerspectiveCamera(FOV, window.innerWidth / window.innerHeight, 0.01, EARTH_RADIUS * SUN_DISTANCE * 1.2); // Adjusted far plane
             camera.position.set(0, 0, DEFAULT_ALTITUDE); // Initial camera position
             camera.lookAt(0, 0, 0); // Look at the center of the scene (Earth)
 
-            const nearPlaneCenterMarkerGeometry = new THREE.CircleGeometry(0.001, 16); 
+            const nearPlaneCenterMarkerGeometry = new THREE.CircleGeometry(camera.near * 0.01, 16); 
             const nearPlaneCenterMarkerMaterial = new THREE.MeshBasicMaterial({
                 color: 0xbb0000,        // Bright red for visibility
                 side: THREE.DoubleSide, // Render both sides
@@ -639,12 +639,12 @@
             const poleMaterial = new THREE.MeshBasicMaterial({ color: 0xf0f5fa, side: THREE.DoubleSide });
 
             northPoleMeshGlobal = new THREE.Mesh(new THREE.CircleGeometry(poleRadius, poleSegments), poleMaterial);
-            northPoleMeshGlobal.position.set(0, EARTH_RADIUS + 0.01, 0);
+            northPoleMeshGlobal.position.set(0, EARTH_RADIUS + 0.001, 0);
             northPoleMeshGlobal.rotation.x = -Math.PI / 2;
             parentMesh.add(northPoleMeshGlobal);
 
             southPoleMeshGlobal = new THREE.Mesh(new THREE.CircleGeometry(poleRadius, poleSegments), poleMaterial);
-            southPoleMeshGlobal.position.set(0, -EARTH_RADIUS - 0.01, 0);
+            southPoleMeshGlobal.position.set(0, -EARTH_RADIUS - 0.001, 0);
             southPoleMeshGlobal.rotation.x = Math.PI / 2;
             parentMesh.add(southPoleMeshGlobal);
         }
@@ -923,7 +923,7 @@
             // Adjust angles based on mouse movement
             localSpherical.theta -= deltaX * sensitivity; // Azimuth
             localSpherical.phi = Math.max(0, Math.min(Math.PI, localSpherical.phi - deltaY * sensitivity));
-            //console.log("L "+ (localSpherical.phi / Math.PI * 180) + " " + (localSpherical.theta / Math.PI * 180));            
+            // console.log("L "+ (localSpherical.phi / Math.PI * 180) + " " + (localSpherical.theta / Math.PI * 180));            
             // Convert back to local direction
             const newLocalLookDir = new THREE.Vector3().setFromSpherical(localSpherical);
             // Rotate back to global frame
@@ -955,9 +955,15 @@
                 camera.position.copy(surfacePoint.multiplyScalar(SURFACE_ALTITUDE));
                 surfaceNormal = new THREE.Vector3().copy(surfacePoint).normalize();
                 rotationQuaternion.setFromUnitVectors(surfaceNormal, new THREE.Vector3(0, -1, 0));
-                // Look straight down
+                // 1. Look straight down
                 camera.lookAt(camera.position.clone().add(surfaceNormal.negate()));
-                camera.up.copy(surfaceNormal.clone().negate()); 
+                // // rotateSkyInSurfaceMode(0, 0);
+                camera.up.set(0, 1, 0); 
+                // 2. Look middle todo
+                // const newLocalLookDir = new THREE.Vector3().set(0, 0, 1);
+                // const newGlobalLookDir = newLocalLookDir.applyQuaternion(rotationQuaternion.clone().invert());   
+                // camera.lookAt(camera.position.clone().add(newGlobalLookDir));
+                // camera.up.copy(surfaceNormal.clone().negate()); 
             } else {
                 camera.position.copy(surfacePoint.multiplyScalar(DEFAULT_ALTITUDE));
                 camera.lookAt(0, 0, 0);
