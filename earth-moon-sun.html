@@ -59,7 +59,7 @@
         #controls input[type="range"] {
             width: 150px; /* Fixed width for sliders */
         }
-        #timeValue, #tileZoomValue, #dayOfYearValue, #moonDistanceFactorValue, #sunDistanceFactorValue { /* Added new value displays */
+        .controlfield {
             font-size: 0.9em;
             margin-left: 8px;
             min-width: 45px; /* Ensure consistent width for value displays */
@@ -141,35 +141,49 @@
          <div class="control-group">
             <label for="dayOfYearSlider">Day of Year:</label>
             <div>
-                <input type="range" id="dayOfYearSlider" min="1" max="366" value="1"> <span id="dayOfYearValue">1</span>
+                <input type="range" id="dayOfYearSlider" min="1" max="366" value="1"> <span id="dayOfYearValue" class="controlfield">1</span>
             </div>
         </div>
         <div class="control-group">
             <label for="timeSlider">Time (UTC):</label>
             <div>
                 <input type="range" id="timeSlider" min="0" max="1439" value="1080">
-                <span id="timeValue">18:00</span>
+                <span id="timeValue" class="controlfield">18:00</span>
             </div>
         </div>
         <div class="control-group">
             <label for="tileZoomSlider">Map Tile Zoom (z):</label>
             <div>
                 <input type="range" id="tileZoomSlider" min="3" max="6" value="3">
-                <span id="tileZoomValue">4</span>
+                <span id="tileZoomValue" class="controlfield">4</span>
             </div>
         </div>
         <div class="control-group">
-            <label for="moonDistanceFactorSlider">Moon Visual Dist. Factor:</label>
+            <label for="moonDistanceFactorSlider">Moon Distance Factor:</label>
             <div>
                 <input type="range" id="moonDistanceFactorSlider" min="1" max="30" value="1" step="0.1">
-                <span id="moonDistanceFactorValue">1.0x</span>
+                <span id="moonDistanceFactorValue" class="controlfield">1.0x</span>
             </div>
         </div>
         <div class="control-group">
-            <label for="sunDistanceFactorSlider">Sun Visual Dist. Factor:</label>
+            <label for="moonScaleFactorSlider">Moon Scale Factor:</label>
+            <div>
+                <input type="range" id="moonScaleFactorSlider" min="1" max="30" value="1" step="0.1">
+                <span id="moonScaleFactorValue" class="controlfield">1.0x</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label for="sunDistanceFactorSlider">Sun Distance Factor:</label>
             <div>
                 <input type="range" id="sunDistanceFactorSlider" min="1" max="30" value="1" step="0.1">
-                <span id="sunDistanceFactorValue">1.0x</span>
+                <span id="sunDistanceFactorValue" class="controlfield">1.0x</span>
+            </div>
+        </div>
+        <div class="control-group">
+            <label for="sunScaleFactorSlider">Sun Scale Factor:</label>
+            <div>
+                <input type="range" id="sunScaleFactorSlider" min="1" max="30" value="1" step="0.1">
+                <span id="sunScaleFactorValue" class="controlfield">1.0x</span>
             </div>
         </div>
     </div>
@@ -193,23 +207,22 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         
         // --- Global Variables ---
-        let scene, camera, renderer, earthMesh, sunLight, controls, moonMesh, moonProjectionMesh;
-        let sunMesh; // Mesh for the Sun globe
-        let sunProjectionMesh; // Mesh to show subsolar point
-        let northPoleMeshGlobal, southPoleMeshGlobal; // Meshes for polar caps
         let currentTileZoomLevel = 4; // Initial tile zoom level for map
-        let moonShadowMesh; // Mesh for the Moon's umbra (shadow)
-        let currentMoonDistanceFactor = 1.0;
-        let currentSunDistanceFactor = 1.0;
-        let _infoRaycaster = new THREE.Raycaster(); // For updateEarthInfo
-        let _viewDirection = new THREE.Vector3(); 
-        
-        // global variables for Surface/Satellite mode
         let isSatelliteViewMode = true;
         let globalElat = NaN, globalElon = NaN;
         let subsolarPoint;
         let isDragging = false, previousMouseX = 0, previousMouseY = 0;
         let rotationQuaternion = new THREE.Quaternion(), surfaceNormal;
+        /// 3D
+        let scene, camera, renderer, controls ;
+        let sunMesh, sunProjectionMesh, sunLight; 
+        let moonMesh, moonProjectionMesh, moonShadowMesh;
+        let earthMesh, northPoleMeshGlobal, southPoleMeshGlobal; 
+        let moonDistFactor = 1.0, sunDistFactor = 1.0, moonScaleFactor = 1.0, sunScaleFactor = 1.0;
+
+        let _infoRaycaster = new THREE.Raycaster(); // For updateEarthInfo
+        let _viewDirection = new THREE.Vector3(); 
+        
         // --- Constants ---
         const FOV = 45;
         const EARTH_RADIUS = 5; // Arbitrary radius for Earth in scene units
@@ -253,6 +266,11 @@
         const moonDistanceFactorValue = document.getElementById('moonDistanceFactorValue');
         const sunDistanceFactorSlider = document.getElementById('sunDistanceFactorSlider');
         const sunDistanceFactorValue = document.getElementById('sunDistanceFactorValue');
+        const moonScaleFactorSlider = document.getElementById('moonScaleFactorSlider');
+        const moonScaleFactorValue = document.getElementById('moonScaleFactorValue');
+        const sunScaleFactorSlider = document.getElementById('sunScaleFactorSlider');
+        const sunScaleFactorValue = document.getElementById('sunScaleFactorValue');
+        
         const canvasContainer = document.getElementById('canvas-container');
         const messageBox = document.getElementById('messageBox');
         const celestialInfoDiv = document.getElementById('celestialInfo');
@@ -328,6 +346,7 @@
             const sunGeometry = new THREE.SphereGeometry(EARTH_RADIUS * SUN_RADIUS_IN_EARTH_RADII, 64, 64);
             const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xFFE45A, wireframe: false }); // Bright yellow, non-emissive for simplicity
             sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+            sunMesh.scale.set(1, 1, 1);
             sunMesh.visible = false; // Initially hidden until position is calculated
             scene.add(sunMesh);
 
@@ -376,10 +395,14 @@
                 syncDaySliderToDate(); // Sync day slider to the initial date
 
                 // Initialize slider values from HTML defaults
-                currentMoonDistanceFactor = parseFloat(moonDistanceFactorSlider.value);
-                moonDistanceFactorValue.textContent = `${currentMoonDistanceFactor.toFixed(1)}x`;
-                currentSunDistanceFactor = parseFloat(sunDistanceFactorSlider.value);
-                sunDistanceFactorValue.textContent = `${currentSunDistanceFactor.toFixed(1)}x`;
+                moonDistFactor = parseFloat(moonDistanceFactorSlider.value);
+                moonDistanceFactorValue.textContent = `${moonDistFactor.toFixed(1)}x`;
+                sunDistFactor = parseFloat(sunDistanceFactorSlider.value);
+                sunDistanceFactorValue.textContent = `${sunDistFactor.toFixed(1)}x`;
+                moonScaleFactor = parseFloat(moonScaleFactorSlider.value);
+                moonScaleFactorSlider.textContent = `${moonScaleFactor.toFixed(1)}x`;
+                sunScaleFactor = parseFloat(sunScaleFactorSlider.value);
+                sunScaleFactorSlider.textContent = `${sunScaleFactor.toFixed(1)}x`;
 
                 updateCelestialPositions(); // Calculate initial Sun/Moon positions
             } catch (error) {
@@ -393,19 +416,19 @@
             controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true; // Smooth camera movement
             controls.dampingFactor = 0.05;
-            controls.minDistance = EARTH_RADIUS + 0.1; // Prevent zooming inside Earth
+            controls.minDistance = EARTH_RADIUS + 0.01; // Prevent zooming inside Earth
             controls.maxDistance = EARTH_RADIUS * SUN_DISTANCE * 1.1; // Adjusted max zoom out
             controls.enablePan = true; // Enable panning (original comment was misleading)
 
             // --- UI Event Listeners ---
-            zoomInBtn.addEventListener('click', () => zoomCamera(0.8));
-            zoomOutBtn.addEventListener('click', () => zoomCamera(1.25));
+            zoomInBtn.addEventListener('click', () => zoomCamera(0.7));
+            zoomOutBtn.addEventListener('click', () => zoomCamera(1.4));
             shiftLeftBtn.addEventListener('click', () => shiftEarth(0, 1));
             shiftRightBtn.addEventListener('click', () => shiftEarth(0, -1));
             shiftTopBtn.addEventListener('click', () => shiftEarth(1, -1));
             shiftBotBtn.addEventListener('click', () => shiftEarth(1, 1));
             window.addEventListener('keydown', (event) => {
-                if (!isSatelliteViewMode) {
+                if (!isSatelliteViewMode && event.target == document.body) {
                     if (event.key === 'ArrowLeft') {
                         shiftEarth(0, 1); 
                     } else if (event.key === 'ArrowRight') {
@@ -451,20 +474,30 @@
                 }
             });
 
+            moonScaleFactorSlider.addEventListener('input', () => {
+                moonScaleFactor = parseFloat(moonScaleFactorSlider.value);
+                moonScaleFactorValue.textContent = `${moonScaleFactor.toFixed(1)}x`;
+                updateCelestialPositions();
+            });
+            sunScaleFactorSlider.addEventListener('input', () => {
+                sunScaleFactor = parseFloat(sunScaleFactorSlider.value);
+                sunScaleFactorValue.textContent = `${sunScaleFactor.toFixed(1)}x`;
+                updateCelestialPositions();
+            });
             moonDistanceFactorSlider.addEventListener('input', () => {
-                currentMoonDistanceFactor = parseFloat(moonDistanceFactorSlider.value);
-                moonDistanceFactorValue.textContent = `${currentMoonDistanceFactor.toFixed(1)}x`;
+                moonDistFactor = parseFloat(moonDistanceFactorSlider.value);
+                moonDistanceFactorValue.textContent = `${moonDistFactor.toFixed(1)}x`;
                 updateCelestialPositions();
             });
 
             sunDistanceFactorSlider.addEventListener('input', () => {
-                currentSunDistanceFactor = parseFloat(sunDistanceFactorSlider.value);
-                sunDistanceFactorValue.textContent = `${currentSunDistanceFactor.toFixed(1)}x`;
+                sunDistFactor = parseFloat(sunDistanceFactorSlider.value);
+                sunDistanceFactorValue.textContent = `${sunDistFactor.toFixed(1)}x`;
                 updateCelestialPositions();
             });
 
             document.addEventListener('mousedown', (e) => {
-                isDragging = true;
+                // isDragging = true;
                 previousMouseX = e.clientX;
                 previousMouseY = e.clientY;
             });
@@ -701,8 +734,9 @@
 
                  // Update Sun Globe position
                  if (sunMesh) {
-                    const visualSunDistance = (EARTH_RADIUS * SUN_DISTANCE) / currentSunDistanceFactor;
+                    const visualSunDistance = (EARTH_RADIUS * SUN_DISTANCE) / sunDistFactor;
                     sunMesh.position.copy(sunDirection.clone().multiplyScalar(visualSunDistance));
+                    sunMesh.scale.set(sunScaleFactor, sunScaleFactor, sunScaleFactor);
                     sunMesh.lookAt(earthMesh.position); // Optional: make it face Earth
                     sunMesh.visible = true;
                  }
@@ -731,7 +765,7 @@
 
             if (moonMesh) {
                 const moonPosGeo = getMoonPosition(currentDate);
-                const visualMoonDistance = (EARTH_RADIUS * MOON_DISTANCE) / currentMoonDistanceFactor; // Use MOON_DISTANCE (actual) and factor
+                const visualMoonDistance = (EARTH_RADIUS * MOON_DISTANCE) / moonDistFactor; // Use MOON_DISTANCE (actual) and factor
 
                 const jday_UT = getJulianDate(currentDate);
                 const gmst_deg = getGMST(jday_UT);
@@ -752,9 +786,9 @@
                     Math.PI / 2  + sublunarLonRad
                 );
                 moonMesh.position.copy(moonCartesian);
+                moonMesh.scale.set(moonScaleFactor, moonScaleFactor, moonScaleFactor);
                 moonMesh.lookAt(earthMesh.position);
                 earthToMoonVecNormalized.copy(moonCartesian).normalize();
-
 
                 if (moonProjectionMesh && !isNaN(sublunarLatRad) && !isNaN(sublunarLonRad)) {
                     const moonProjectionPosition = new THREE.Vector3();
@@ -845,27 +879,19 @@
         }
 
         function updateEarthInfo() {
-            if (!camera || !controls || !earthMesh) { 
-                earthInfoDiv.innerHTML = "Earth: Data unavailable";
+            if (isSatelliteViewMode) {
                 globalElat = NaN; globalElon = NaN; // Reset global lat/lon
-                return;
-            }
-            let elat = NaN;
-            let elon = NaN;
-
-            camera.getWorldDirection(_viewDirection);
-            _infoRaycaster.set(camera.position, _viewDirection);
-            const intersects = _infoRaycaster.intersectObject(earthMesh, false); 
-            if (intersects.length > 0) {
-                const intersectionPoint = intersects[0].point; 
-                elat = Math.asin(intersectionPoint.y / intersectionPoint.length()) * (180 / Math.PI);
-                elon = (Math.atan2(intersectionPoint.x, intersectionPoint.z) - Math.PI / 2) * (180 / Math.PI);
-                elon = (elon + 540) % 360 - 180; 
-                globalElat = elat; // Store lat globally
-                globalElon = elon; // Store lon globally
-            } else {
-                globalElat = NaN; // Camera not pointing at Earth
-                globalElon = NaN;
+                if (camera && controls && earthMesh) { 
+                    camera.getWorldDirection(_viewDirection);
+                    _infoRaycaster.set(camera.position, _viewDirection);
+                    const intersects = _infoRaycaster.intersectObject(earthMesh, false); 
+                    if (intersects.length > 0) {
+                        const intersectionPoint = intersects[0].point; 
+                        globalElat = Math.asin(intersectionPoint.y / intersectionPoint.length()) * (180 / Math.PI);
+                        globalElon = (Math.atan2(intersectionPoint.x, intersectionPoint.z) - Math.PI / 2) * (180 / Math.PI);
+                        globalElon = (globalElon + 540) % 360 - 180; 
+                    }
+                }
             }
             let dist = (camera.position.length() - EARTH_RADIUS); 
             let distKm = (dist / EARTH_RADIUS) * EARTH_RADIUS_KM; 
@@ -883,22 +909,7 @@
         }
 
         function rotateSkyInSurfaceMode(deltaX, deltaY) {
-            const sensitivity = (2 * Math.tan(FOV/2 * Math.PI/180)) / window.innerHeight;
-            //const currentSpherical = initialSpherical.clone();
-            //currentSpherical.phi += deltaY * sensitivity;
-            //currentSpherical.theta += deltaX * sensitivity; // Horizontal rotation
-            
-            // console.log(currentSpherical.phi / Math.PI * 180);
-            // console.log(currentSpherical.theta / Math.PI * 180);
-            // if(currentSpherical.phi < Math.PI/2) {
-            //     currentSpherical.phi = Math.PI/2;
-            // }
-            // console.log("M "+ (currentSpherical.phi / Math.PI * 180) + " " + (currentSpherical.theta / Math.PI * 180));
-            // const newLookAt = new THREE.Vector3().setFromSpherical(currentSpherical)
-            //                     .add(camera.position.clone().negate());
-            // camera.lookAt(newLookAt);
-
-            
+            const sensitivity = (2 * Math.tan(FOV/2 * Math.PI/180)) / window.innerHeight;            
             // Get current look direction
             const lookDirection = new THREE.Vector3();
             camera.getWorldDirection(lookDirection);
@@ -906,7 +917,7 @@
             const localLookDir = lookDirection.clone().applyQuaternion(rotationQuaternion);
             // Convert to local spherical coordinates
             const localSpherical = new THREE.Spherical().setFromVector3(localLookDir);
-            if (localSpherical.phi < 0.001 * Math.PI) {
+            if (localSpherical.phi == 0) {
                 localSpherical.theta = 0;
             }
             // Adjust angles based on mouse movement
@@ -946,19 +957,11 @@
                 rotationQuaternion.setFromUnitVectors(surfaceNormal, new THREE.Vector3(0, -1, 0));
                 // Look straight down
                 camera.lookAt(camera.position.clone().add(surfaceNormal.negate()));
-
-                // TEST everything correct
-                const lookDirection = new THREE.Vector3();
-                camera.getWorldDirection(lookDirection);
-                // Rotate direction into local frame (Y-axis aligned with surface normal)
-                const localLookDir = lookDirection.clone().applyQuaternion(rotationQuaternion);
-                // Convert to local spherical coordinates
-                const localSpherical = new THREE.Spherical().setFromVector3(localLookDir);
-                console.log("L "+ (localSpherical.phi / Math.PI * 180) + " " + (localSpherical.theta / Math.PI * 180));
-
+                camera.up.copy(surfaceNormal.clone().negate()); 
             } else {
                 camera.position.copy(surfacePoint.multiplyScalar(DEFAULT_ALTITUDE));
                 camera.lookAt(0, 0, 0);
+                camera.up.set(0, 1, 0); 
             }
             controls.enabled = isSatelliteViewMode;
             controls.enablePan = isSatelliteViewMode;
@@ -969,7 +972,7 @@
 
         function zoomCamera(factor) {
             const currentDistance = camera.position.length();
-            let newDistance = currentDistance * factor;
+            let newDistance = (currentDistance - EARTH_RADIUS) * factor + EARTH_RADIUS;
             newDistance = Math.max(controls.minDistance, Math.min(controls.maxDistance, newDistance));
             camera.position.setLength(newDistance);
             updateEarthInfo();
