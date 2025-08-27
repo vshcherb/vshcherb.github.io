@@ -55,6 +55,19 @@
         #search-results::-webkit-scrollbar { width: 5px; }
         #search-results::-webkit-scrollbar-track { background: #2d3748; }
         #search-results::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 2px; }
+
+        /* Toggle Switch */
+        .toggle-bg:after {
+            content: '';
+            @apply absolute top-0.5 left-0.5 bg-white border border-gray-300 rounded-full h-5 w-5 transition shadow-sm;
+        }
+        input:checked + .toggle-bg:after {
+            transform: translateX(100%);
+            @apply border-white;
+        }
+        input:checked + .toggle-bg {
+            @apply bg-cyan-500;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 flex flex-col md:flex-row h-screen overflow-hidden">
@@ -67,6 +80,18 @@
         </div>
         
         <div class="space-y-8">
+            <!-- Mode Toggle -->
+            <div>
+                <label for="mode-toggle" class="flex items-center cursor-pointer">
+                    <span class="mr-3 text-sm font-medium">Paths</span>
+                    <div class="relative">
+                        <input type="checkbox" id="mode-toggle" class="sr-only">
+                        <div class="block bg-gray-600 w-10 h-6 rounded-full toggle-bg"></div>
+                    </div>
+                    <span class="ml-3 text-sm font-medium">Locations</span>
+                </label>
+            </div>
+
             <!-- Location & Time Controls -->
             <div>
                 <div class="space-y-4">
@@ -82,6 +107,7 @@
                             <option value="sydney">Sydney</option>
                             <option value="cairo">Cairo</option>
                             <option value="buenosaires">Buenos Aires</option>
+                            <option value="moscow">Moscow</option>
                         </select>
                     </label>
                     <div class="flex items-end gap-2">
@@ -92,6 +118,10 @@
                         <button id="prev-day-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
                         <button id="next-day-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
                     </div>
+                    <label class="block hidden" id="time-picker-container">
+                        <span class="text-gray-400 text-sm font-medium">Time</span>
+                        <input type="time" id="time-picker" class="form-input w-full mt-1 rounded-md shadow-sm focus:ring-opacity-50" style="color-scheme: dark;">
+                    </label>
                     <label class="block">
                         <span class="text-gray-400 text-sm font-medium">Timezone (Label)</span>
                          <select id="timezone-select" class="form-select w-full mt-1 rounded-md shadow-sm focus:ring-opacity-50">
@@ -103,7 +133,7 @@
             </div>
 
             <!-- Celestial Body Controls -->
-            <div>
+            <div id="celestial-controls-container">
                 <h2 class="text-lg font-semibold mb-3 border-b border-gray-600 pb-2">Celestial Bodies</h2>
                 <div class="relative">
                     <input type="text" id="search-celestial" placeholder="Search for stars, galaxies..." class="form-input w-full rounded-md shadow-sm focus:ring-opacity-50">
@@ -142,6 +172,10 @@
             const nextDayBtn = document.getElementById('next-day-btn');
             const searchInput = document.getElementById('search-celestial');
             const searchResults = document.getElementById('search-results');
+            const modeToggle = document.getElementById('mode-toggle');
+            const timePickerContainer = document.getElementById('time-picker-container');
+            const timePicker = document.getElementById('time-picker');
+            const celestialControlsContainer = document.getElementById('celestial-controls-container');
 
             // --- DATA ---
             const cities = {
@@ -153,7 +187,8 @@
                 tokyo: { lat: 35.6895, lon: 139.6917, tzOffset: 9 },
                 sydney: { lat: -33.8688, lon: 151.2093, tzOffset: 10 },
                 cairo: { lat: 30.0444, lon: 31.2357, tzOffset: 2 },
-                buenosaires: { lat: -34.6037, lon: -58.3816, tzOffset: -3 }
+                buenosaires: { lat: -34.6037, lon: -58.3816, tzOffset: -3 },
+                moscow: { lat: 55.7558, lon: 37.6173, tzOffset: 3 }
             };
             const celestialDb = {
                 sun: { name: 'Sun', color: 'rgba(255, 235, 59, 1)' },
@@ -183,11 +218,14 @@
             let drawScene;
 
             const init = () => {
-                datePicker.value = new Date().toISOString().split('T')[0];
+                const now = new Date();
+                datePicker.value = now.toISOString().split('T')[0];
+                timePicker.value = now.toTimeString().slice(0,5);
+
                 resizeCanvas();
                 window.addEventListener('resize', resizeCanvas);
                 
-                [datePicker, citySelect, timezoneSelect, celestialOptions].forEach(el => {
+                [datePicker, citySelect, timezoneSelect, celestialOptions, modeToggle, timePicker].forEach(el => {
                     el.addEventListener('change', () => drawScene());
                 });
 
@@ -287,6 +325,11 @@
             };
 
             drawScene = () => {
+                const isLocationMode = modeToggle.checked;
+                timePickerContainer.classList.toggle('hidden', !isLocationMode);
+                celestialControlsContainer.classList.toggle('hidden', isLocationMode);
+                legend.classList.toggle('hidden', isLocationMode);
+
                 const { width, height } = canvas.getBoundingClientRect();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = '#111827';
@@ -299,21 +342,58 @@
                 const radius = Math.min(width, height) * 0.4;
                 drawGrid(radius);
 
-                const selectedDate = new Date(datePicker.value + 'T00:00:00Z');
                 const city = cities[citySelect.value];
-                const drawnLabels = [];
-
-                document.querySelectorAll('#celestial-options input:checked').forEach(cb => {
-                    const id = cb.dataset.celestial;
-                    const obj = celestialDb[id];
-                    if (id === 'sun' || id === 'moon') {
-                        drawCelestialPath(selectedDate, city, id, radius, obj.color, obj.name, drawnLabels);
-                    } else {
-                        drawObjectPath(selectedDate, city, obj, radius, obj.color, obj.name, drawnLabels);
-                    }
-                });
+                
+                if (isLocationMode) {
+                    const dateStr = datePicker.value;
+                    const timeStr = timePicker.value;
+                    const selectedDate = new Date(`${dateStr}T${timeStr}:00`);
+                    drawAllObjectLocations(selectedDate, city, radius);
+                } else {
+                    const selectedDate = new Date(datePicker.value + 'T00:00:00Z');
+                    const drawnLabels = [];
+                    document.querySelectorAll('#celestial-options input:checked').forEach(cb => {
+                        const id = cb.dataset.celestial;
+                        const obj = celestialDb[id];
+                        if (id === 'sun' || id === 'moon') {
+                            drawCelestialPath(selectedDate, city, id, radius, obj.color, obj.name, drawnLabels);
+                        } else {
+                            drawObjectPath(selectedDate, city, obj, radius, obj.color, obj.name, drawnLabels);
+                        }
+                    });
+                }
                 
                 ctx.restore();
+            };
+
+            const drawAllObjectLocations = (date, city, radius) => {
+                Object.entries(celestialDb).forEach(([id, obj]) => {
+                    let getPosFunc;
+                    if (id === 'sun') {
+                        getPosFunc = (d) => SunCalc.getPosition(d, city.lat, city.lon);
+                    } else if (id === 'moon') {
+                        getPosFunc = (d) => SunCalc.getMoonPosition(d, city.lat, city.lon);
+                    } else {
+                        getPosFunc = (d) => {
+                            const northPos = raDecToAzAlt(obj.ra, obj.dec, city.lat, city.lon, d);
+                            northPos.azimuth = (northPos.azimuth + Math.PI) % (2 * Math.PI);
+                            return northPos;
+                        };
+                    }
+
+                    const pos = getPosFunc(date);
+                    if (pos.altitude > 0) {
+                        const { x, y } = getCanvasCoords(pos.azimuth, pos.altitude, radius);
+                        ctx.beginPath();
+                        ctx.arc(x, y, 5 / scale, 0, 2 * Math.PI);
+                        ctx.fillStyle = obj.color;
+                        ctx.fill();
+                        
+                        ctx.fillStyle = 'white';
+                        ctx.font = `${12 / scale}px Inter`;
+                        ctx.fillText(obj.name, x, y - 15 / scale);
+                    }
+                });
             };
 
             const drawGrid = (radius) => {
@@ -323,19 +403,18 @@
                 ctx.textBaseline = 'middle';
                 ctx.font = `${10 / scale}px Inter`;
 
-                for (let i = 10; i <= 90; i += 10) {
+                for (let i = 10; i <= 80; i += 10) {
                     const r = radius * (1 - i / 90);
                     ctx.beginPath();
                     ctx.arc(0, 0, r, 0, 2 * Math.PI);
                     ctx.setLineDash([2, 4]);
                     ctx.stroke();
                     ctx.setLineDash([]);
-                    // Draw on 4 axes if space allows
                     if (scale > 1.1) {
-                        ctx.fillText(`${i}°`, r, 5 / scale); // E
-                        ctx.fillText(`${i}°`, -r, 5 / scale); // W
-                        ctx.fillText(`${i}°`, 0, r + 5/scale); // S
-                        ctx.fillText(`${i}°`, 0, -r + 5/scale); // N
+                        ctx.fillText(`${i}°`, r, 5 / scale);
+                        ctx.fillText(`${i}°`, -r, 5 / scale);
+                        ctx.fillText(`${i}°`, 0, r + 5/scale);
+                        ctx.fillText(`${i}°`, 0, -r + 5/scale);
                     }
                 }
 
