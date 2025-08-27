@@ -1,5 +1,212 @@
-<h1><a href="lab.html">Test LAB color space</a></h1>
-<h1><a href="webgl.html">Web</a></h1>
-<h1><a href="earth.html">Earth WebGL</a></h1>
-<h1><a href="earth-moon-sun.html">Earth-Moon-Sun</a></h1>
-<h1><a href="sunpath.html">Sun path</a></h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vshcherb - Personal Projects</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background-color: #2c3e50; /* Dark Blue-Gray */
+            color: #ecf0f1; /* Light Gray */
+            padding: 2rem 0;
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 4px solid #e74c3c; /* Red-Orange Accent */
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.8em;
+            font-weight: 300;
+        }
+
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .project-card {
+            background-color: #ffffff;
+            border-radius: 12px; /* Slightly more rounded */
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); /* Softer shadow */
+            overflow: hidden;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .project-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+        }
+
+        .project-card-emoji {
+            font-size: 4.5em; /* Larger emoji */
+            text-align: center;
+            padding: 30px 20px 20px 20px; /* More padding around emoji */
+            background-color: #e9ecef; /* Light background for emoji area */
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .project-card-content {
+            padding: 25px; /* More padding in content area */
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .project-card-content h2 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            font-size: 1.6em; /* Slightly larger title */
+            color: #34495e; /* Darker Blue */
+        }
+
+        .project-card-content p {
+            font-size: 0.98em; /* Slightly larger description text */
+            color: #555;
+            margin-bottom: 25px;
+            flex-grow: 1;
+        }
+
+        .project-card-content a.project-link {
+            display: inline-block;
+            background-color: #e74c3c;
+            color: #ffffff;
+            padding: 12px 20px; /* Larger button */
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            text-align: center;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            margin-top: auto;
+        }
+
+        .project-card-content a.project-link:hover {
+            background-color: #c0392b; /* Darker Red-Orange */
+            transform: translateY(-2px);
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px 0;
+            margin-top: 50px;
+            background-color: #34495e;
+            color: #ecf0f1;
+            font-size: 0.9em;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2.2em;
+            }
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+            .project-card-emoji {
+                font-size: 4em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+            .project-card-content h2 {
+                font-size: 1.4em;
+            }
+            .project-card-emoji {
+                font-size: 3.5em;
+                padding: 25px 15px 15px 15px;
+            }
+            .project-card-content a.project-link {
+                padding: 10px 18px;
+                font-size: 0.9em;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>vshcherb Personal Projects</h1>
+    </header>
+
+    <div class="container">
+        <div class="projects-grid">
+
+            <div class="project-card">
+                <div class="project-card-emoji">
+                    🎨👁️‍🗨️ </div>
+                <div class="project-card-content">
+                    <h2>Test Color Vision</h2>
+                    <p>A project to test aspects of color vision. Explore various tests and challenges related to color perception.</p>
+                    <a href="lab.html" class="project-link">View Project</a>
+                </div>
+            </div>
+
+            <div class="project-card">
+                <div class="project-card-emoji">
+                    🧊 </div>
+                <div class="project-card-content">
+                    <h2>WebGL Line</h2>
+                    <p>A test project demonstrating a line rendered with WebGL. Explore basic 3D graphics in the browser.</p>
+                    <a href="webgl.html" class="project-link">View Project</a>
+                </div>
+            </div>
+
+            <div class="project-card">
+                <div class="project-card-emoji">
+                    🌍 </div>
+                <div class="project-card-content">
+                    <h2>Earth WebGL</h2>
+                    <p>An interactive 3D representation of the Earth using WebGL technology. Explore global data or visualizations.</p>
+                    <a href="earth.html" class="project-link">View Project</a>
+                </div>
+            </div>
+
+            <div class="project-card">
+                <div class="project-card-emoji">
+                    ☀️🌕🌍 </div>
+                <div class="project-card-content">
+                    <h2>Earth-Moon-Sun</h2>
+                    <p>A simulation or visualization of the Earth, Moon, and Sun system, likely demonstrating orbital mechanics or celestial events.</p>
+                    <a href="earth-moon-sun.html" class="project-link">View Project</a>
+                </div>
+            </div>
+
+            <div class="project-card">
+                <div class="project-card-emoji">
+                    ☀️🌕🌍 </div>
+                <div class="project-card-content">
+                    <h2>Sun and planets path</h2>
+                    <p>A simulation or visualization of the Earth, Moon, and Sun system, likely demonstrating orbital mechanics or celestial events.</p>
+                    <a href="sunpath.html" class="project-link">Sun path</a>
+                </div>
+            </div>
+    </div>
+
+    <footer>
+        <p>&copy; <script>document.write(new Date().getFullYear())</script> vshcherb. All projects are for demonstration and personal use.</p>
+    </footer>
+
+</body>
+</html>
+
