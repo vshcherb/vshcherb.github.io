@@ -347,7 +347,9 @@
                 if (isLocationMode) {
                     const dateStr = datePicker.value;
                     const timeStr = timePicker.value;
-                    const selectedDate = new Date(`${dateStr}T${timeStr}:00`);
+                    const isUTC = timezoneSelect.value === 'UTC';
+                    const dateString = `${dateStr}T${timeStr}:00${isUTC ? 'Z' : ''}`;
+                    const selectedDate = new Date(dateString);
                     drawAllObjectLocations(selectedDate, city, radius);
                 } else {
                     const selectedDate = new Date(datePicker.value + 'T00:00:00Z');
