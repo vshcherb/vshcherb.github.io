@@ -78,6 +78,10 @@
                             <option value="barcelona">Barcelona</option>
                             <option value="newyork">New York</option>
                             <option value="saopaulo">São Paulo</option>
+                            <option value="tokyo">Tokyo</option>
+                            <option value="sydney">Sydney</option>
+                            <option value="cairo">Cairo</option>
+                            <option value="buenosaires">Buenos Aires</option>
                         </select>
                     </label>
                     <div class="flex items-end gap-2">
@@ -145,7 +149,11 @@
                 amsterdam: { lat: 52.367, lon: 4.904, tzOffset: 2 },
                 barcelona: { lat: 41.385, lon: 2.173, tzOffset: 2 },
                 newyork: { lat: 40.712, lon: -74.006, tzOffset: -4 },
-                saopaulo: { lat: -23.55, lon: -46.633, tzOffset: -3 }
+                saopaulo: { lat: -23.55, lon: -46.633, tzOffset: -3 },
+                tokyo: { lat: 35.6895, lon: 139.6917, tzOffset: 9 },
+                sydney: { lat: -33.8688, lon: 151.2093, tzOffset: 10 },
+                cairo: { lat: 30.0444, lon: 31.2357, tzOffset: 2 },
+                buenosaires: { lat: -34.6037, lon: -58.3816, tzOffset: -3 }
             };
             const celestialDb = {
                 sun: { name: 'Sun', color: 'rgba(255, 235, 59, 1)' },
@@ -167,16 +175,13 @@
             };
             const MIN_SCALE = 0.75;
 
-            // --- STATE ---
             let scale = 1.0;
             let panOffset = { x: 0, y: 0 };
             let isPanning = false;
             let panStart = { x: 0, y: 0 };
             
-            // --- FORWARD DECLARATION FOR HOISTING ---
             let drawScene;
 
-            // --- INITIALIZATION ---
             const init = () => {
                 datePicker.value = new Date().toISOString().split('T')[0];
                 resizeCanvas();
@@ -186,11 +191,9 @@
                     el.addEventListener('change', () => drawScene());
                 });
 
-                // Date navigation
                 prevDayBtn.addEventListener('click', () => changeDay(-1));
                 nextDayBtn.addEventListener('click', () => changeDay(1));
 
-                // Search functionality
                 searchInput.addEventListener('input', handleSearch);
                 searchInput.addEventListener('focus', handleSearch);
                 document.addEventListener('click', (e) => {
@@ -199,8 +202,6 @@
                     }
                 });
 
-
-                // Canvas interactions
                 canvas.addEventListener('wheel', handleZoom);
                 canvas.addEventListener('mousedown', startPan);
                 canvas.addEventListener('mousemove', doPan);
@@ -222,7 +223,6 @@
                 }
             };
 
-            // --- UI & EVENT HANDLERS ---
             const changeDay = (offset) => {
                 const currentDate = new Date(datePicker.value);
                 currentDate.setUTCDate(currentDate.getUTCDate() + offset);
@@ -262,7 +262,6 @@
                 searchInput.value = '';
                 searchResults.classList.add('hidden');
                 
-                // Avoid adding duplicates
                 if (document.querySelector(`input[data-celestial="${id}"]`)) {
                     return;
                 }
@@ -287,8 +286,6 @@
                 drawScene();
             };
 
-
-            // --- CORE DRAWING LOGIC ---
             drawScene = () => {
                 const { width, height } = canvas.getBoundingClientRect();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -325,6 +322,7 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.font = `${10 / scale}px Inter`;
+
                 for (let i = 10; i <= 90; i += 10) {
                     const r = radius * (1 - i / 90);
                     ctx.beginPath();
@@ -332,8 +330,15 @@
                     ctx.setLineDash([2, 4]);
                     ctx.stroke();
                     ctx.setLineDash([]);
-                    ctx.fillText(`${i}°`, r * Math.cos(-Math.PI/4), r * Math.sin(-Math.PI/4));
+                    // Draw on 4 axes if space allows
+                    if (scale > 1.1) {
+                        ctx.fillText(`${i}°`, r, 5 / scale); // E
+                        ctx.fillText(`${i}°`, -r, 5 / scale); // W
+                        ctx.fillText(`${i}°`, 0, r + 5/scale); // S
+                        ctx.fillText(`${i}°`, 0, -r + 5/scale); // N
+                    }
                 }
+
                 const compass = { 'N': 0, 'NNE': 22.5, 'NE': 45, 'ENE': 67.5, 'E': 90, 'ESE': 112.5, 'SE': 135, 'SSE': 157.5, 'S': 180, 'SSW': 202.5, 'SW': 225, 'WSW': 247.5, 'W': 270, 'WNW': 292.5, 'NW': 315, 'NNW': 337.5 };
                 Object.entries(compass).forEach(([dir, angleDeg]) => {
                     const angleRad = toRad(angleDeg - 90);
@@ -349,6 +354,14 @@
                         const x = (radius + 20 / scale) * Math.cos(angleRad);
                         const y = (radius + 20 / scale) * Math.sin(angleRad);
                         ctx.fillText(dir, x, y);
+                    }
+                    if (scale > 1.5 && !isMajor) {
+                        ctx.save();
+                        ctx.font = `${8 / scale}px Inter`;
+                        ctx.translate(radius * 0.6 * Math.cos(angleRad), radius * 0.6 * Math.sin(angleRad));
+                        ctx.rotate(angleRad + Math.PI / 2);
+                        ctx.fillText(`${angleDeg}°`, 0, 0);
+                        ctx.restore();
                     }
                 });
             };
