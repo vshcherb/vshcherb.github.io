@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geo-Locator from Sun Position</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SunCalc.js for verification calculations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/suncalc/1.8.0/suncalc.min.js"></script>
+    <!-- Google Fonts for typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Custom focus styles for better accessibility */
+        input:focus {
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-2xl mx-auto p-6 md:p-8 bg-white rounded-2xl shadow-lg">
+        <!-- Header -->
+        <h1 class="text-3xl font-bold text-center text-gray-900 mb-2">Geo-Locator from Sun Position</h1>
+        <p class="text-center text-gray-600 mb-8">Enter the sun's position and the UTC time to calculate your geographic coordinates.</p>
+
+        <!-- Input Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+                 <label for="altitude" class="block text-sm font-medium text-gray-700 mb-1">Sun Altitude (°)</label>
+                 <input type="number" id="altitude" value="4.69" step="0.01" class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition">
+                 <p class="text-xs text-gray-500 mt-1">Angle above the horizon (0-90).</p>
+            </div>
+            <div>
+                 <label for="azimuth" class="block text-sm font-medium text-gray-700 mb-1">Sun Azimuth (°)</label>
+                 <input type="number" id="azimuth" value="274.87" step="0.01" class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition">
+                 <p class="text-xs text-gray-500 mt-1">Angle from North, clockwise (0-360).</p>
+            </div>
+            <div>
+                 <label for="date" class="block text-sm font-medium text-gray-700 mb-1">UTC Date</label>
+                 <input type="date" id="date" value="2025-09-05" class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition">
+            </div>
+            <div>
+                 <label for="time" class="block text-sm font-medium text-gray-700 mb-1">UTC Time</label>
+                 <input type="time" id="time" value="16:00:00" step="1" class="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition">
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="flex flex-col sm:flex-row gap-4 mb-8">
+            <button id="calculate" class="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300 shadow-md">Calculate Coordinates</button>
+            <button id="currentTime" class="w-full bg-gray-200 text-gray-800 font-semibold py-3 px-6 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-300">Use Current UTC Time</button>
+        </div>
+        
+        <!-- Results Section Container -->
+        <div id="results-container" class="space-y-6 hidden">
+            <!-- Error Message Box -->
+            <div id="error-message" class="hidden p-4 bg-red-100 text-red-800 rounded-lg text-center font-medium"></div>
+
+            <!-- Subsolar Point Card -->
+            <div id="subsolar-card" class="p-6 bg-amber-50 border-l-4 border-amber-500 rounded-r-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-3">Subsolar Point (Sun Overhead)</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center">
+                    <div>
+                        <p class="text-sm text-gray-500">Latitude</p>
+                        <p id="subsolar-latitude" class="text-2xl font-bold text-amber-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Longitude</p>
+                        <p id="subsolar-longitude" class="text-2xl font-bold text-amber-800">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Calculated Coordinates Card -->
+            <div id="coords-card" class="p-6 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-3">Your Calculated Coordinates</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center">
+                    <div>
+                        <p class="text-sm text-gray-500">Latitude</p>
+                        <p id="latitude" class="text-2xl font-bold text-blue-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Longitude</p>
+                        <p id="longitude" class="text-2xl font-bold text-blue-800">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Verification Card -->
+            <div id="verify-card" class="p-6 bg-green-50 border-l-4 border-green-500 rounded-r-lg">
+                <h2 class="text-xl font-semibold text-gray-800 mb-3">Verification Check</h2>
+                <p class="text-sm text-gray-600 mb-4 text-center">This is the sun's position recalculated using your coordinates above. It should closely match your input.</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-center">
+                    <div>
+                        <p class="text-sm text-gray-500">Recalculated Altitude</p>
+                        <p id="verify-altitude" class="text-2xl font-bold text-green-800">-</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">Recalculated Azimuth</p>
+                        <p id="verify-azimuth" class="text-2xl font-bold text-green-800">-</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- Core Astronomical Calculation Functions ---
+        // These are helper functions, some adapted from the SunCalc library's logic,
+        // to get location-independent properties of the sun (like declination).
+        
+        const rad = Math.PI / 180;
+        const e = rad * 23.4397; // Obliquity of the Earth
+
+        const dayMs = 1000 * 60 * 60 * 24;
+        const J2000 = 2451545;
+
+        function toDays(date) {
+            return (date.valueOf() / dayMs) - 0.5 + 2440588 - J2000;
+        }
+
+        function solarMeanAnomaly(d) {
+            return rad * (357.5291 + 0.98560028 * d);
+        }
+
+        function eclipticLongitude(d) {
+            const M = solarMeanAnomaly(d);
+            const C = rad * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+            const P = rad * 102.9372;
+            return M + C + P + Math.PI;
+        }
+
+        function declination(d) {
+            return Math.asin(Math.sin(eclipticLongitude(d)) * Math.sin(e));
+        }
+
+        function rightAscension(d) {
+            const L = eclipticLongitude(d);
+            return Math.atan2(Math.sin(L) * Math.cos(e), Math.cos(L));
+        }
+
+        function siderealTime(d, lw) {
+            // This calculates the Greenwich Mean Sidereal Time (GMST)
+            const GMST = rad * (280.46061837 + 360.98564736629 * d);
+            // The result must be wrapped to the 0-2PI range. The original value accumulates
+            // all rotations since J2000, causing the longitude bug.
+            return (GMST % (2 * Math.PI)) - lw;
+        }
+
+
+        // --- DOM Element References ---
+        const altitudeInput = document.getElementById('altitude');
+        const azimuthInput = document.getElementById('azimuth');
+        const dateInput = document.getElementById('date');
+        const timeInput = document.getElementById('time');
+        const calculateBtn = document.getElementById('calculate');
+        const currentTimeBtn = document.getElementById('currentTime');
+
+        const resultsContainer = document.getElementById('results-container');
+        const errorMessage = document.getElementById('error-message');
+        
+        const subsolarCard = document.getElementById('subsolar-card');
+        const subsolarLatitudeOutput = document.getElementById('subsolar-latitude');
+        const subsolarLongitudeOutput = document.getElementById('subsolar-longitude');
+
+        const coordsCard = document.getElementById('coords-card');
+        const latitudeOutput = document.getElementById('latitude');
+        const longitudeOutput = document.getElementById('longitude');
+
+        const verifyCard = document.getElementById('verify-card');
+        const verifyAltitudeOutput = document.getElementById('verify-altitude');
+        const verifyAzimuthOutput = document.getElementById('verify-azimuth');
+
+        // --- UI Functions ---
+        function setCurrentUTCTime() {
+            const now = new Date();
+            dateInput.value = now.toISOString().slice(0, 10);
+            timeInput.value = now.toISOString().slice(11, 19);
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.remove('hidden');
+            resultsContainer.classList.add('hidden');
+        }
+
+        function hideError() {
+            errorMessage.classList.add('hidden');
+        }
+
+        // --- Main Calculation Logic ---
+        function calculate() {
+            hideError();
+
+            const alt = parseFloat(altitudeInput.value);
+            const az = parseFloat(azimuthInput.value);
+            const dateStr = dateInput.value;
+            const timeStr = timeInput.value;
+
+            // Input validation
+            if (isNaN(alt) || isNaN(az) || !dateStr || !timeStr) {
+                showError("Please fill in all fields with valid numbers.");
+                return;
+            }
+             if (alt < -5 || alt > 90) { // Allow slightly below horizon for atmospheric refraction
+                showError("Altitude must be between 0° and 90°.");
+                return;
+            }
+            if (az < 0 || az > 360) {
+                showError("Azimuth must be between 0° and 360°.");
+                return;
+            }
+
+            const date = new Date(`${dateStr}T${timeStr}Z`);
+            if (isNaN(date.getTime())) {
+                showError("The entered date or time is invalid.");
+                return;
+            }
+            
+            const altRad = alt * rad;
+            const azRad = az * rad;
+            const d = toDays(date);
+
+            // --- NEW ALGORITHM: ASTRONOMICAL TRIANGLE SOLUTION ---
+
+            // 1. Find Sun's position: Declination (dec) and Greenwich Hour Angle (GHA)
+            const subsolarLatRad = declination(d); // dec = subsolar latitude
+            const ra = rightAscension(d);
+            const GMST_wrapped = siderealTime(d, 0); 
+            const GHA = GMST_wrapped - ra;
+            const subsolarLonRad = -GHA; // lon of subsolar point
+
+            // 2. Solve for Observer's Latitude (lat)
+            // Based on the cosine rule for the astronomical triangle:
+            // sin(dec) = sin(alt) * sin(lat) + cos(alt) * cos(lat) * cos(az)
+            // This is rearranged into the form R*sin(lat + alpha) = D to be solved for lat.
+            const A_lat = Math.sin(altRad);
+            const B_lat = Math.cos(altRad) * Math.cos(azRad);
+            const D_lat = Math.sin(subsolarLatRad);
+
+            const R_lat = Math.sqrt(A_lat * A_lat + B_lat * B_lat);
+            if (Math.abs(D_lat / R_lat) > 1) {
+                showError("Calculation failed: Invalid geometry for latitude. Check inputs.");
+                return;
+            }
+            const alpha_lat = Math.atan2(B_lat, A_lat);
+            const latRad = Math.asin(D_lat / R_lat) - alpha_lat;
+
+            // 3. Solve for Local Hour Angle (h)
+            // Based on the sine rule for the astronomical triangle:
+            // cos(alt) * sin(az) = -cos(dec) * sin(h)
+            const sin_h = -(Math.cos(altRad) * Math.sin(azRad)) / Math.cos(subsolarLatRad);
+            if (Math.abs(sin_h) > 1) {
+                showError("Calculation failed: Invalid geometry for hour angle. Check inputs.");
+                return;
+            }
+            const hRad = Math.asin(sin_h);
+
+            // 4. Calculate Observer's Longitude (lon)
+            // Formula: lon = h - GHA 
+            const lonRad = hRad - GHA;
+            
+            // --- END OF NEW ALGORITHM ---
+
+            // --- Display Subsolar Point ---
+            let subsolarLatDeg = subsolarLatRad / rad;
+            let subsolarLonDeg = subsolarLonRad / rad;
+            subsolarLatitudeOutput.textContent = subsolarLatDeg.toFixed(4) + '°';
+            subsolarLongitudeOutput.textContent = subsolarLonDeg.toFixed(4) + '°';
+
+
+            // --- Display Your Coordinates ---
+            let latDeg = latRad / rad;
+            let lonDeg = lonRad / rad;
+            latitudeOutput.textContent = latDeg.toFixed(4) + '°';
+            longitudeOutput.textContent = lonDeg.toFixed(4) + '°';
+            
+            // Show all result cards
+            resultsContainer.classList.remove('hidden');
+            subsolarCard.classList.remove('hidden');
+            coordsCard.classList.remove('hidden');
+            verifyCard.classList.remove('hidden');
+
+
+            // --- Verification Step ---
+            // Use the original SunCalc library to recalculate sun position from our results
+            const sunPos = SunCalc.getPosition(date, latDeg, lonDeg);
+            
+            const verifyAlt = sunPos.altitude / rad;
+            // SunCalc azimuth is from South, clockwise. Convert to North, clockwise.
+            const verifyAz = (sunPos.azimuth / rad + 180) % 360;
+
+            verifyAltitudeOutput.textContent = verifyAlt.toFixed(4) + '°';
+            verifyAzimuthOutput.textContent = verifyAz.toFixed(4) + '°';
+        }
+
+        // --- Event Listeners ---
+        // Do not set current time on load, use the new defaults instead.
+        // setCurrentUTCTime();
+        currentTimeBtn.addEventListener('click', setCurrentUTCTime);
+        calculateBtn.addEventListener('click', calculate);
+    });
+    </script>
+</body>
+</html>
+
