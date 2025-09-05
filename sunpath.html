@@ -107,9 +107,41 @@
                             <option value="sydney">Sydney</option>
                             <option value="cairo">Cairo</option>
                             <option value="buenosaires">Buenos Aires</option>
-                            <option value="moscow">Moscow</option>
+                            <option value="custom">Custom Coordinates</option>
                         </select>
                     </label>
+                    <div>
+                        <div class="flex items-end gap-2">
+                            <label class="block flex-grow">
+                                <span class="text-gray-400 text-sm font-medium">Coordinates (lat, lon)</span>
+                                <input type="text" id="coordinates-input" class="form-input w-full mt-1 rounded-md shadow-sm focus:ring-opacity-50" placeholder="e.g., 40.71, -74.00">
+                            </label>
+                            <div id="custom-step-container" class="hidden">
+                                <label class="block">
+                                    <span class="text-gray-400 text-sm font-medium">Step</span>
+                                    <select id="coord-step" class="form-select w-full mt-1 rounded-md shadow-sm">
+                                        <option>10</option>
+                                        <option>5</option>
+                                        <option>1</option>
+                                        <option>0.5</option>
+                                        <option selected>0.1</option>
+                                        <option>0.05</option>
+                                        <option>0.01</option>
+                                        <option>0.001</option>
+                                        <option>0.0001</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="custom-nudge-container" class="hidden mt-2 flex justify-center items-center gap-2">
+                            <button id="coord-left-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+                            <div class="flex flex-col gap-1">
+                                <button id="coord-up-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-up" class="w-5 h-5"></i></button>
+                                <button id="coord-down-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-down" class="w-5 h-5"></i></button>
+                            </div>
+                            <button id="coord-right-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+                        </div>
+                    </div>
                     <div class="flex items-end gap-2">
                         <label class="block flex-grow">
                             <span class="text-gray-400 text-sm font-medium">Date</span>
@@ -165,6 +197,7 @@
             const ctx = canvas.getContext('2d');
             const datePicker = document.getElementById('date-picker');
             const citySelect = document.getElementById('city-select');
+            const coordinatesInput = document.getElementById('coordinates-input');
             const timezoneSelect = document.getElementById('timezone-select');
             const celestialOptions = document.getElementById('celestial-options');
             const legend = document.getElementById('legend').querySelector('div');
@@ -176,6 +209,14 @@
             const timePickerContainer = document.getElementById('time-picker-container');
             const timePicker = document.getElementById('time-picker');
             const celestialControlsContainer = document.getElementById('celestial-controls-container');
+            const customStepContainer = document.getElementById('custom-step-container');
+            const customNudgeContainer = document.getElementById('custom-nudge-container');
+            const coordStep = document.getElementById('coord-step');
+            const coordUpBtn = document.getElementById('coord-up-btn');
+            const coordDownBtn = document.getElementById('coord-down-btn');
+            const coordLeftBtn = document.getElementById('coord-left-btn');
+            const coordRightBtn = document.getElementById('coord-right-btn');
+
 
             // --- DATA ---
             const cities = {
@@ -188,7 +229,7 @@
                 sydney: { lat: -33.8688, lon: 151.2093, tzOffset: 10 },
                 cairo: { lat: 30.0444, lon: 31.2357, tzOffset: 2 },
                 buenosaires: { lat: -34.6037, lon: -58.3816, tzOffset: -3 },
-                moscow: { lat: 55.7558, lon: 37.6173, tzOffset: 3 }
+                custom: { lat: 50.45, lon: 30.523, tzOffset: 0 } // Default to Kyiv, UTC. Updated by user input.
             };
             const celestialDb = {
                 sun: { name: 'Sun', color: 'rgba(255, 235, 59, 1)' },
@@ -217,6 +258,71 @@
             
             let drawScene;
 
+            const updateCoordinatesInput = () => {
+                const selectedCityKey = citySelect.value;
+                if (cities[selectedCityKey]) {
+                    const city = cities[selectedCityKey];
+                    const lat = Number(city.lat);
+                    const lon = Number(city.lon);
+                    // Determine precision from step for custom coords, otherwise use 4 decimal places
+                    let precision = 4;
+                    if(selectedCityKey === 'custom') {
+                        const stepStr = String(coordStep.value);
+                        if(stepStr.includes('.')) {
+                            precision = stepStr.split('.')[1].length;
+                        } else {
+                            precision = 0;
+                        }
+                    }
+                    coordinatesInput.value = `${lat.toFixed(precision)}, ${lon.toFixed(precision)}`;
+                }
+            };
+
+            const handleCoordinateChange = () => {
+                const value = coordinatesInput.value.trim();
+                const parts = value.split(/[\s,]+/);
+
+                if (parts.length === 2) {
+                    const lat = parseFloat(parts[0]);
+                    const lon = parseFloat(parts[1]);
+
+                    if (!isNaN(lat) && lat >= -90 && lat <= 90 && !isNaN(lon) && lon >= -180 && lon <= 180) {
+                        cities.custom.lat = lat;
+                        cities.custom.lon = lon;
+                        
+                        if (citySelect.value !== 'custom') {
+                            citySelect.value = 'custom';
+                            toggleCustomControls();
+                        }
+                        drawScene();
+                    }
+                }
+            };
+
+            const toggleCustomControls = () => {
+                const show = citySelect.value === 'custom';
+                customStepContainer.classList.toggle('hidden', !show);
+                customNudgeContainer.classList.toggle('hidden', !show);
+            };
+
+            const nudgeCoordinates = (latChange, lonChange) => {
+                const step = parseFloat(coordStep.value);
+                let { lat, lon } = cities.custom;
+
+                lat += latChange * step;
+                lon += lonChange * step;
+
+                // Clamp values
+                lat = Math.max(-90, Math.min(90, lat));
+                lon = Math.max(-180, Math.min(180, lon));
+                
+                cities.custom.lat = lat;
+                cities.custom.lon = lon;
+
+                updateCoordinatesInput();
+                drawScene();
+            };
+
             const init = () => {
                 const now = new Date();
                 datePicker.value = now.toISOString().split('T')[0];
@@ -225,9 +331,27 @@
                 resizeCanvas();
                 window.addEventListener('resize', resizeCanvas);
                 
-                [datePicker, citySelect, timezoneSelect, celestialOptions, modeToggle, timePicker].forEach(el => {
+                // General listeners
+                [datePicker, timezoneSelect, celestialOptions, modeToggle, timePicker].forEach(el => {
                     el.addEventListener('change', () => drawScene());
                 });
+
+                // Specific listeners for location controls
+                citySelect.addEventListener('change', () => {
+                    if (citySelect.value !== 'custom') {
+                        updateCoordinatesInput();
+                    }
+                    toggleCustomControls();
+                    drawScene();
+                });
+                coordinatesInput.addEventListener('input', handleCoordinateChange);
+                
+                // Nudge button listeners
+                coordUpBtn.addEventListener('click', () => nudgeCoordinates(1, 0));
+                coordDownBtn.addEventListener('click', () => nudgeCoordinates(-1, 0));
+                coordRightBtn.addEventListener('click', () => nudgeCoordinates(0, 1));
+                coordLeftBtn.addEventListener('click', () => nudgeCoordinates(0, -1));
+                coordStep.addEventListener('change', updateCoordinatesInput);
 
                 prevDayBtn.addEventListener('click', () => changeDay(-1));
                 nextDayBtn.addEventListener('click', () => changeDay(1));
@@ -246,6 +370,8 @@
                 canvas.addEventListener('mouseup', endPan);
                 canvas.addEventListener('mouseleave', endPan);
                 
+                toggleCustomControls();
+                updateCoordinatesInput();
                 drawScene();
                 generateLegend();
             };
@@ -473,7 +599,7 @@
                 ctx.fillStyle = color;
                 ctx.lineWidth = 2 / scale;
                 const pathPoints = [];
-                const tzOffsetHours = timezoneSelect.value === 'local' ? city.tzOffset : 0;
+                const tzOffsetHours = timezoneSelect.value === 'local' && citySelect.value !== 'custom' ? city.tzOffset : 0;
                 ctx.beginPath();
                 let lastPos = null;
                 for (let i = 0; i <= 24 * 60; i += 5) {
@@ -525,7 +651,7 @@
             const drawRiseSetLabels = (times, city, radius, color, riseLabel, setLabel, getPosFunc) => {
                 ctx.fillStyle = color;
                 ctx.font = `${11 / scale}px Inter`;
-                const tzOffsetHours = timezoneSelect.value === 'local' ? city.tzOffset : 0;
+                const tzOffsetHours = timezoneSelect.value === 'local' && citySelect.value !== 'custom' ? city.tzOffset : 0;
                 const formatTime = (d) => {
                     if (!d || isNaN(d)) return '';
                     const localTime = new Date(d.getTime() + tzOffsetHours * 3600 * 1000);
@@ -629,3 +755,4 @@
     </script>
 </body>
 </html>
+
