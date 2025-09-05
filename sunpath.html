@@ -55,6 +55,11 @@
         #search-results::-webkit-scrollbar { width: 5px; }
         #search-results::-webkit-scrollbar-track { background: #2d3748; }
         #search-results::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 2px; }
+        
+        #info-panel-content::-webkit-scrollbar { height: 4px; }
+        #info-panel-content::-webkit-scrollbar-track { background: #2d3748; }
+        #info-panel-content::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 2px; }
+
 
         /* Toggle Switch */
         .toggle-bg:after {
@@ -107,6 +112,7 @@
                             <option value="sydney">Sydney</option>
                             <option value="cairo">Cairo</option>
                             <option value="buenosaires">Buenos Aires</option>
+                            <option value="moscow">Moscow</option>
                             <option value="custom">Custom Coordinates</option>
                         </select>
                     </label>
@@ -150,10 +156,16 @@
                         <button id="prev-day-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
                         <button id="next-day-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
                     </div>
-                    <label class="block hidden" id="time-picker-container">
-                        <span class="text-gray-400 text-sm font-medium">Time</span>
-                        <input type="time" id="time-picker" class="form-input w-full mt-1 rounded-md shadow-sm focus:ring-opacity-50" style="color-scheme: dark;">
-                    </label>
+                    <div class="hidden" id="time-picker-container">
+                         <div class="flex items-end gap-2">
+                            <label class="block flex-grow">
+                                <span class="text-gray-400 text-sm font-medium">Time</span>
+                                <input type="time" id="time-picker" class="form-input w-full mt-1 rounded-md shadow-sm focus:ring-opacity-50" style="color-scheme: dark;">
+                            </label>
+                            <button id="prev-minute-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+                            <button id="next-minute-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+                        </div>
+                    </div>
                     <label class="block">
                         <span class="text-gray-400 text-sm font-medium">Timezone (Label)</span>
                          <select id="timezone-select" class="form-select w-full mt-1 rounded-md shadow-sm focus:ring-opacity-50">
@@ -179,12 +191,14 @@
         </div>
     </div>
 
-    <!-- CANVAS & LEGEND -->
+    <!-- CANVAS & INFO PANEL -->
     <div class="flex-grow flex relative bg-gray-900">
         <canvas id="celestialCanvas" class="w-full h-full"></canvas>
-        <div id="legend" class="absolute bottom-4 right-4 bg-gray-800 bg-opacity-80 p-4 rounded-lg shadow-xl text-sm">
-            <h3 class="font-bold mb-2 text-center">Hourly Legend (UTC)</h3>
-            <div class="grid grid-cols-4 gap-x-4 gap-y-2"></div>
+        <div id="info-panel" class="absolute bottom-0 left-0 right-0 bg-gray-800 bg-opacity-90 p-3 shadow-inner text-sm overflow-hidden">
+            <h3 id="info-panel-title" class="font-bold mb-2 text-center text-cyan-400"></h3>
+            <div id="info-panel-content" class="flex items-center gap-x-4 overflow-x-auto pb-2 whitespace-nowrap">
+                <!-- Content will be generated here -->
+            </div>
         </div>
     </div>
 
@@ -200,7 +214,9 @@
             const coordinatesInput = document.getElementById('coordinates-input');
             const timezoneSelect = document.getElementById('timezone-select');
             const celestialOptions = document.getElementById('celestial-options');
-            const legend = document.getElementById('legend').querySelector('div');
+            const infoPanel = document.getElementById('info-panel');
+            const infoPanelTitle = document.getElementById('info-panel-title');
+            const infoPanelContent = document.getElementById('info-panel-content');
             const prevDayBtn = document.getElementById('prev-day-btn');
             const nextDayBtn = document.getElementById('next-day-btn');
             const searchInput = document.getElementById('search-celestial');
@@ -216,6 +232,8 @@
             const coordDownBtn = document.getElementById('coord-down-btn');
             const coordLeftBtn = document.getElementById('coord-left-btn');
             const coordRightBtn = document.getElementById('coord-right-btn');
+            const prevMinuteBtn = document.getElementById('prev-minute-btn');
+            const nextMinuteBtn = document.getElementById('next-minute-btn');
 
 
             // --- DATA ---
@@ -229,6 +247,7 @@
                 sydney: { lat: -33.8688, lon: 151.2093, tzOffset: 10 },
                 cairo: { lat: 30.0444, lon: 31.2357, tzOffset: 2 },
                 buenosaires: { lat: -34.6037, lon: -58.3816, tzOffset: -3 },
+                moscow: { lat: 55.7558, lon: 37.6173, tzOffset: 3 },
                 custom: { lat: 50.45, lon: 30.523, tzOffset: 0 } // Default to Kyiv, UTC. Updated by user input.
             };
             const celestialDb = {
@@ -355,6 +374,9 @@
 
                 prevDayBtn.addEventListener('click', () => changeDay(-1));
                 nextDayBtn.addEventListener('click', () => changeDay(1));
+                
+                prevMinuteBtn.addEventListener('click', () => changeMinute(-1));
+                nextMinuteBtn.addEventListener('click', () => changeMinute(1));
 
                 searchInput.addEventListener('input', handleSearch);
                 searchInput.addEventListener('focus', handleSearch);
@@ -373,7 +395,6 @@
                 toggleCustomControls();
                 updateCoordinatesInput();
                 drawScene();
-                generateLegend();
             };
 
             const resizeCanvas = () => {
@@ -391,6 +412,19 @@
                 const currentDate = new Date(datePicker.value);
                 currentDate.setUTCDate(currentDate.getUTCDate() + offset);
                 datePicker.value = currentDate.toISOString().split('T')[0];
+                drawScene();
+            };
+            
+            const changeMinute = (offset) => {
+                const [hours, minutes] = timePicker.value.split(':').map(Number);
+                const date = new Date(); // Temporary date to do calculations
+                date.setHours(hours);
+                date.setMinutes(minutes + offset);
+                
+                const newHours = String(date.getHours()).padStart(2, '0');
+                const newMinutes = String(date.getMinutes()).padStart(2, '0');
+                
+                timePicker.value = `${newHours}:${newMinutes}`;
                 drawScene();
             };
             
@@ -454,7 +488,6 @@
                 const isLocationMode = modeToggle.checked;
                 timePickerContainer.classList.toggle('hidden', !isLocationMode);
                 celestialControlsContainer.classList.toggle('hidden', isLocationMode);
-                legend.classList.toggle('hidden', isLocationMode);
 
                 const { width, height } = canvas.getBoundingClientRect();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -476,8 +509,10 @@
                     const isUTC = timezoneSelect.value === 'UTC';
                     const dateString = `${dateStr}T${timeStr}:00${isUTC ? 'Z' : ''}`;
                     const selectedDate = new Date(dateString);
+                    generateLocationInfo(selectedDate, city);
                     drawAllObjectLocations(selectedDate, city, radius);
                 } else {
+                    generateHourlyLegend();
                     const selectedDate = new Date(datePicker.value + 'T00:00:00Z');
                     const drawnLabels = [];
                     document.querySelectorAll('#celestial-options input:checked').forEach(cb => {
@@ -502,11 +537,7 @@
                     } else if (id === 'moon') {
                         getPosFunc = (d) => SunCalc.getMoonPosition(d, city.lat, city.lon);
                     } else {
-                        getPosFunc = (d) => {
-                            const northPos = raDecToAzAlt(obj.ra, obj.dec, city.lat, city.lon, d);
-                            northPos.azimuth = (northPos.azimuth + Math.PI) % (2 * Math.PI);
-                            return northPos;
-                        };
+                        getPosFunc = (d) => raDecToAzAlt(obj.ra, obj.dec, city.lat, city.lon, d);
                     }
 
                     const pos = getPosFunc(date);
@@ -585,11 +616,7 @@
                 drawRiseSetLabels(times, city, radius, color, riseLabel, setLabel, getPosFunc);
             };
             const drawObjectPath = (date, city, object, radius, color, name, drawnLabels) => {
-                const getPosFunc = (d) => {
-                    const northPos = raDecToAzAlt(object.ra, object.dec, city.lat, city.lon, d);
-                    northPos.azimuth = (northPos.azimuth + Math.PI) % (2 * Math.PI);
-                    return northPos;
-                };
+                const getPosFunc = (d) => raDecToAzAlt(object.ra, object.dec, city.lat, city.lon, d);
                 drawPath(date, city, radius, color, name, getPosFunc, drawnLabels);
                 const times = findRiseSet(date, city, getPosFunc);
                 drawRiseSetLabels(times, city, radius, color, `${name} Rise`, `${name} Set`, getPosFunc);
@@ -673,29 +700,92 @@
                 const r = radius * (1 - (altitude / (Math.PI / 2)));
                 return { x: r * Math.cos(angle), y: r * Math.sin(angle) };
             };
-            const generateLegend = () => {
-                legend.innerHTML = '';
+            const toRad = (deg) => deg * Math.PI / 180;
+            const toDeg = (rad) => rad * 180 / Math.PI;
+            
+            const radToCompass = (rad) => {
+                const compass = { 'N': 0, 'NNE': 22.5, 'NE': 45, 'ENE': 67.5, 'E': 90, 'ESE': 112.5, 'SE': 135, 'SSE': 157.5, 'S': 180, 'SSW': 202.5, 'SW': 225, 'WSW': 247.5, 'W': 270, 'WNW': 292.5, 'NW': 315, 'NNW': 337.5 };
+                // Azimuth is south-based, clockwise. Convert to degrees, north-based, clockwise.
+                let deg = (toDeg(rad) + 180) % 360;
+                let closestDir = 'N';
+                let minDiff = 360;
+                Object.entries(compass).forEach(([dir, angleDeg]) => {
+                    let diff = Math.abs(deg - angleDeg);
+                    if (diff > 180) diff = 360 - diff; // Handle wrap-around
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestDir = dir;
+                    }
+                });
+                return closestDir;
+            };
+
+            const generateHourlyLegend = () => {
+                infoPanelTitle.textContent = 'Hourly Legend (UTC)';
+                infoPanelContent.innerHTML = '';
+                infoPanelContent.classList.add('justify-center');
+                infoPanelContent.classList.remove('justify-start');
+
                 [0, 3, 6, 9, 12, 15, 18, 21].forEach(hour => {
                     const hue = (hour * 15 + 60) % 360;
                     const color = `hsl(${hue}, 100%, 50%)`;
-                    legend.innerHTML += `<div class="flex items-center gap-2"><div class="w-4 h-4 rounded-full" style="background-color: ${color};"></div><span>${String(hour).padStart(2, '0')}:00</span></div>`;
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-2';
+                    div.innerHTML = `<div class="w-4 h-4 rounded-full" style="background-color: ${color};"></div><span>${String(hour).padStart(2, '0')}:00</span>`;
+                    infoPanelContent.appendChild(div);
                 });
             };
-            const toRad = (deg) => deg * Math.PI / 180;
+
+            const generateLocationInfo = (date, city) => {
+                infoPanelTitle.textContent = `Celestial Positions at ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                infoPanelContent.innerHTML = '';
+                infoPanelContent.classList.remove('justify-center');
+                infoPanelContent.classList.add('justify-start');
+
+                const visibleObjects = [];
+                Object.entries(celestialDb).forEach(([id, obj]) => {
+                    let getPosFunc;
+                    if (id === 'sun') {
+                        getPosFunc = (d) => SunCalc.getPosition(d, city.lat, city.lon);
+                    } else if (id === 'moon') {
+                        getPosFunc = (d) => SunCalc.getMoonPosition(d, city.lat, city.lon);
+                    } else {
+                        getPosFunc = (d) => raDecToAzAlt(obj.ra, obj.dec, city.lat, city.lon, d);
+                    }
+                    const pos = getPosFunc(date);
+                    if (pos.altitude > 0) {
+                        const altDeg = toDeg(pos.altitude);
+                        const azDegNorth = (toDeg(pos.azimuth) + 180) % 360;
+                        const compass = radToCompass(pos.azimuth);
+                        const infoString = `<span class="font-bold" style="color:${obj.color};">${obj.name}</span> ${altDeg.toFixed(2)}°, ${azDegNorth.toFixed(2)}° ${compass}`;
+                        visibleObjects.push(infoString);
+                    }
+                });
+
+                if (visibleObjects.length > 0) {
+                    infoPanelContent.innerHTML = visibleObjects.join('<span class="text-gray-500 mx-2">•</span>');
+                } else {
+                    infoPanelContent.innerHTML = '<span class="text-gray-400">No celestial objects visible above the horizon.</span>';
+                    infoPanelContent.classList.add('justify-center');
+                }
+            };
+
             const getLST = (date, lon) => {
                 const jd = date.getTime() / 86400000 + 2440587.5;
                 const d = jd - 2451545.0;
                 const gmst = 18.697374558 + 24.06570982441908 * d;
                 return (gmst + lon / 15 + 24) % 24;
             };
+
             const raDecToAzAlt = (ra, dec, lat, lon, date) => {
                 const lst = getLST(date, lon);
                 const ha = toRad((lst - ra) * 15);
                 const latRad = toRad(lat), decRad = toRad(dec);
                 const altRad = Math.asin(Math.sin(decRad) * Math.sin(latRad) + Math.cos(decRad) * Math.cos(latRad) * Math.cos(ha));
                 const azRad = Math.acos((Math.sin(decRad) - Math.sin(altRad) * Math.sin(latRad)) / (Math.cos(altRad) * Math.cos(latRad)));
-                let azimuth = Math.sin(ha) > 0 ? 2 * Math.PI - azRad : azRad;
-                return { altitude: altRad, azimuth: azimuth }; 
+                let northAzimuth = Math.sin(ha) > 0 ? 2 * Math.PI - azRad : azRad;
+                let southAzimuth = (northAzimuth + Math.PI) % (2 * Math.PI);
+                return { altitude: altRad, azimuth: southAzimuth }; 
             };
             const findRiseSet = (date, city, getPosFunc) => {
                 let rise, set;
