@@ -77,7 +77,6 @@
 </head>
 <body class="bg-gray-900 text-gray-200 flex flex-col md:flex-row h-screen overflow-hidden">
 
-    <!-- CONTROLS -->
     <div class="w-full md:w-96 bg-gray-800 p-6 shadow-2xl flex-shrink-0 overflow-y-auto control-panel flex flex-col">
         <div class="flex items-center gap-3 mb-6">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-cyan-400"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z"/><path d="M19 12H5"/><path d="m12 5 3.14 6.14L22 12l-6.86.86L12 19l-3.14-6.14L2 12l6.86-.86L12 5Z"/></svg>
@@ -85,7 +84,6 @@
         </div>
         
         <div class="space-y-8">
-            <!-- Mode Toggle -->
             <div>
                 <label for="mode-toggle" class="flex items-center cursor-pointer">
                     <span class="mr-3 text-sm font-medium">Paths</span>
@@ -97,7 +95,6 @@
                 </label>
             </div>
 
-            <!-- Location & Time Controls -->
             <div>
                 <div class="space-y-4">
                     <label class="block">
@@ -106,12 +103,17 @@
                             <option value="kyiv">Kyiv</option>
                             <option value="amsterdam">Amsterdam</option>
                             <option value="barcelona">Barcelona</option>
+                            <option value="berlin">Berlin</option>
+                            <option value="buenosaires">Buenos Aires</option>
+                            <option value="cairo">Cairo</option>
+                            <option value="krakow">Krakow</option>
+                            <option value="minsk">Minsk</option>
+                            <option value="munich">Munich</option>
                             <option value="newyork">New York</option>
                             <option value="saopaulo">São Paulo</option>
-                            <option value="tokyo">Tokyo</option>
                             <option value="sydney">Sydney</option>
-                            <option value="cairo">Cairo</option>
-                            <option value="buenosaires">Buenos Aires</option>
+                            <option value="tokyo">Tokyo</option>
+                            <option value="warsaw">Warsaw</option>
                             <option value="custom">Custom Coordinates</option>
                         </select>
                     </label>
@@ -175,7 +177,6 @@
                 </div>
             </div>
 
-            <!-- Celestial Body Controls -->
             <div id="celestial-controls-container">
                 <h2 class="text-lg font-semibold mb-3 border-b border-gray-600 pb-2">Celestial Bodies</h2>
                 <div class="relative">
@@ -190,14 +191,12 @@
         </div>
     </div>
 
-    <!-- CANVAS & INFO PANEL -->
     <div class="flex-grow flex relative bg-gray-900">
         <canvas id="celestialCanvas" class="w-full h-full"></canvas>
         <div id="info-panel" class="absolute bottom-0 left-0 right-0 bg-gray-800 bg-opacity-90 p-3 shadow-inner text-sm overflow-hidden">
             <h3 id="info-panel-title" class="font-bold mb-2 text-center text-cyan-400"></h3>
             <div id="info-panel-content" class="flex items-center gap-x-4 overflow-x-auto pb-2 whitespace-nowrap">
-                <!-- Content will be generated here -->
-            </div>
+                </div>
         </div>
     </div>
 
@@ -240,12 +239,17 @@
                 kyiv: { lat: 50.45, lon: 30.523, tzOffset: 3 },
                 amsterdam: { lat: 52.367, lon: 4.904, tzOffset: 2 },
                 barcelona: { lat: 41.385, lon: 2.173, tzOffset: 2 },
+                berlin: { lat: 52.52, lon: 13.40, tzOffset: 2 },
+                buenosaires: { lat: -34.6037, lon: -58.3816, tzOffset: -3 },
+                cairo: { lat: 30.0444, lon: 31.2357, tzOffset: 2 },
+                krakow: { lat: 50.06, lon: 19.94, tzOffset: 2 },
+                minsk: { lat: 53.90, lon: 27.56, tzOffset: 3 },
+                munich: { lat: 48.14, lon: 11.58, tzOffset: 2 },
                 newyork: { lat: 40.712, lon: -74.006, tzOffset: -4 },
                 saopaulo: { lat: -23.55, lon: -46.633, tzOffset: -3 },
-                tokyo: { lat: 35.6895, lon: 139.6917, tzOffset: 9 },
                 sydney: { lat: -33.8688, lon: 151.2093, tzOffset: 10 },
-                cairo: { lat: 30.0444, lon: 31.2357, tzOffset: 2 },
-                buenosaires: { lat: -34.6037, lon: -58.3816, tzOffset: -3 },
+                tokyo: { lat: 35.6895, lon: 139.6917, tzOffset: 9 },
+                warsaw: { lat: 52.23, lon: 21.01, tzOffset: 2 },
                 custom: { lat: 50.45, lon: 30.523, tzOffset: 0 } // Default to Kyiv, UTC. Updated by user input.
             };
             const celestialDb = {
@@ -843,4 +847,3 @@
     </script>
 </body>
 </html>
-
