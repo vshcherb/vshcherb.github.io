@@ -59,6 +59,13 @@
         #info-panel-content::-webkit-scrollbar { height: 4px; }
         #info-panel-content::-webkit-scrollbar-track { background: #2d3748; }
         #info-panel-content::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 2px; }
+
+        /* Styles for collapsibles */
+        .collapsible-content {
+            transition: max-height 0.3s ease-out;
+            overflow: hidden;
+        }
+
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 flex flex-col md:flex-row h-screen overflow-hidden">
@@ -69,10 +76,14 @@
             <h1 class="text-2xl font-bold text-cyan-400">Celestial Path</h1>
         </div>
         
-        <div class="space-y-8">
-             <div>
-                <h2 class="text-lg font-semibold mb-3 border-b border-gray-600 pb-2">Display Mode</h2>
-                <div class="space-y-2 mt-2">
+        <div class="space-y-4">
+             <!-- Section 1: Display Mode -->
+            <div class="border-b border-gray-700 pb-4">
+                <div id="toggle-display" class="flex justify-between items-center cursor-pointer">
+                    <h2 class="text-lg font-semibold text-gray-300">Display Mode</h2>
+                    <i data-lucide="chevron-down" class="w-5 h-5 transition-transform text-gray-400"></i>
+                </div>
+                <div id="content-display" class="collapsible-content mt-3 space-y-2">
                      <label class="p-2 rounded-md bg-gray-700/50 flex items-center">
                          <input type="checkbox" id="show-paths-checkbox" class="form-checkbox" checked>
                          <span class="ml-3">Show Celestial Paths</span>
@@ -84,8 +95,13 @@
                 </div>
             </div>
 
-            <div>
-                <div class="space-y-4">
+            <!-- Section 2: Location & Time -->
+            <div class="border-b border-gray-700 pb-4">
+                <div id="toggle-location" class="flex justify-between items-center cursor-pointer">
+                    <h2 class="text-lg font-semibold text-gray-300">Location & Time</h2>
+                    <i data-lucide="chevron-down" class="w-5 h-5 transition-transform text-gray-400"></i>
+                </div>
+                <div id="content-location" class="collapsible-content mt-3 space-y-4">
                     <label class="block">
                         <span class="text-gray-400 text-sm font-medium">Location</span>
                         <select id="city-select" class="form-select w-full mt-1 rounded-md shadow-sm focus:ring-opacity-50">
@@ -146,7 +162,7 @@
                         <button id="prev-day-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
                         <button id="next-day-btn" class="p-2 rounded-md date-nav-btn"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
                     </div>
-                    <div class="hidden" id="time-picker-container">
+                    <div  id="time-picker-container">
                          <div class="flex items-end gap-2">
                             <label class="block flex-grow">
                                 <span class="text-gray-400 text-sm font-medium">Time</span>
@@ -166,15 +182,21 @@
                 </div>
             </div>
 
-            <div id="celestial-controls-container">
-                <h2 class="text-lg font-semibold mb-3 border-b border-gray-600 pb-2">Celestial Bodies</h2>
-                <div class="relative">
-                    <input type="text" id="search-celestial" placeholder="Search for stars, galaxies..." class="form-input w-full rounded-md shadow-sm focus:ring-opacity-50">
-                    <div id="search-results" class="absolute z-10 w-full bg-gray-700 rounded-md shadow-lg mt-1 hidden"></div>
+            <!-- Section 3: Celestial Bodies -->
+            <div id="celestial-controls-container" class="pb-4">
+                <div id="toggle-celestial" class="flex justify-between items-center cursor-pointer">
+                    <h2 class="text-lg font-semibold text-gray-300">Celestial Bodies</h2>
+                    <i data-lucide="chevron-down" class="w-5 h-5 transition-transform text-gray-400"></i>
                 </div>
-                <div id="celestial-options" class="space-y-2 mt-4">
-                    <label class="p-2 rounded-md bg-gray-700/50 flex items-center"><input type="checkbox" data-celestial="sun" class="form-checkbox" checked> <span class="ml-3">Sun</span></label>
-                    <label class="p-2 rounded-md bg-gray-700/50 flex items-center"><input type="checkbox" data-celestial="moon" class="form-checkbox" checked> <span class="ml-3">Moon</span></label>
+                <div id="content-celestial" class="collapsible-content mt-3">
+                    <div class="relative">
+                        <input type="text" id="search-celestial" placeholder="Search for stars, galaxies..." class="form-input w-full rounded-md shadow-sm focus:ring-opacity-50">
+                        <div id="search-results" class="absolute z-10 w-full bg-gray-700 rounded-md shadow-lg mt-1 hidden"></div>
+                    </div>
+                    <div id="celestial-options" class="space-y-2 mt-4">
+                        <label class="p-2 rounded-md bg-gray-700/50 flex items-center"><input type="checkbox" data-celestial="sun" class="form-checkbox" checked> <span class="ml-3">Sun</span></label>
+                        <label class="p-2 rounded-md bg-gray-700/50 flex items-center"><input type="checkbox" data-celestial="moon" class="form-checkbox" checked> <span class="ml-3">Moon</span></label>
+                    </div>
                 </div>
             </div>
         </div>
@@ -243,8 +265,8 @@
                 custom: { lat: 50.45, lon: 30.523, tzOffset: 0 } // Default to Kyiv, UTC. Updated by user input.
             };
             const celestialDb = {
-                sun: { name: 'Sun', color: 'rgba(255, 235, 59, 1)' },
-                moon: { name: 'Moon', color: 'rgba(200, 200, 220, 1)' },
+                sun: { name: 'Sun', color: 'rgba(255, 235, 59, 1)', path: true },
+                moon: { name: 'Moon', color: 'rgba(200, 200, 220, 1)', path: true },
                 polaris: { ra: 2.58, dec: 89.26, name: 'Polaris', color: 'rgba(139, 195, 255, 1)' },
                 sirius: { ra: 6.75, dec: -16.72, name: 'Sirius', color: 'rgba(255, 179, 128, 1)' },
                 betelgeuse: { ra: 5.92, dec: 7.41, name: 'Betelgeuse', color: 'rgba(255, 100, 100, 1)' },
@@ -268,6 +290,46 @@
             let panStart = { x: 0, y: 0 };
             
             let drawScene;
+
+            const setupCollapsibles = () => {
+                const collapsibles = [
+                    { toggleId: 'toggle-display', contentId: 'content-display', startOpen: true },
+                    { toggleId: 'toggle-location', contentId: 'content-location', startOpen: false },
+                    { toggleId: 'toggle-celestial', contentId: 'content-celestial', startOpen: false }
+                ];
+
+                collapsibles.forEach(({ toggleId, contentId, startOpen }) => {
+                    const toggle = document.getElementById(toggleId);
+                    const content = document.getElementById(contentId);
+                    // The lucide library replaces the <i> tag with an <svg> tag, so we select the svg.
+                    const icon = toggle.querySelector('svg'); 
+
+                    if (toggle && content && icon) {
+                        // Set initial state based on the startOpen flag
+                        if (startOpen) {
+                            content.style.maxHeight = content.scrollHeight + "px";
+                            icon.classList.add('rotate-180');
+                        } else {
+                            content.style.maxHeight = '0px';
+                            icon.classList.remove('rotate-180');
+                        }
+
+                        toggle.addEventListener('click', () => {
+                            const isCollapsed = content.style.maxHeight === '0px';
+                            
+                            if (isCollapsed) {
+                                // To expand: set max-height to its natural scroll height
+                                content.style.maxHeight = content.scrollHeight + "px";
+                                icon.classList.add('rotate-180');
+                            } else {
+                                // To collapse: set max-height to 0
+                                content.style.maxHeight = '0px';
+                                icon.classList.remove('rotate-180');
+                            }
+                        });
+                    }
+                });
+            };
 
             const updateCoordinatesInput = () => {
                 const selectedCityKey = citySelect.value;
@@ -305,7 +367,7 @@
                             citySelect.value = 'custom';
                             toggleCustomControls();
                         }
-                        drawScene();
+                        drawSceneRecalc();
                     }
                 }
             };
@@ -331,7 +393,7 @@
                 cities.custom.lon = lon;
 
                 updateCoordinatesInput();
-                drawScene();
+                drawSceneRecalc();
             };
 
             const init = () => {
@@ -344,7 +406,7 @@
                 
                 // General listeners
                 [datePicker, timezoneSelect, celestialOptions, showPathsCheckbox, showLocationsCheckbox, timePicker].forEach(el => {
-                    el.addEventListener('change', () => drawScene());
+                    el.addEventListener('change', () => drawSceneRecalc());
                 });
 
                 // Specific listeners for location controls
@@ -353,7 +415,7 @@
                         updateCoordinatesInput();
                     }
                     toggleCustomControls();
-                    drawScene();
+                    drawSceneRecalc();
                 });
                 coordinatesInput.addEventListener('input', handleCoordinateChange);
                 
@@ -384,9 +446,10 @@
                 canvas.addEventListener('mouseup', endPan);
                 canvas.addEventListener('mouseleave', endPan);
                 
+                setupCollapsibles(); // Setup collapsible sections
                 toggleCustomControls();
                 updateCoordinatesInput();
-                drawScene();
+                drawSceneRecalc();
             };
 
             const resizeCanvas = () => {
@@ -404,7 +467,7 @@
                 const currentDate = new Date(datePicker.value);
                 currentDate.setUTCDate(currentDate.getUTCDate() + offset);
                 datePicker.value = currentDate.toISOString().split('T')[0];
-                drawScene();
+                drawSceneRecalc();
             };
             
             const changeMinute = (offset) => {
@@ -417,73 +480,101 @@
                 const newMinutes = String(date.getMinutes()).padStart(2, '0');
                 
                 timePicker.value = `${newHours}:${newMinutes}`;
-                drawScene();
+                drawSceneRecalc();
             };
             
             const handleSearch = (e) => {
                 const query = e.target.value.toLowerCase();
                 if (query.length < 1) {
-                    searchResults.classList.add('hidden');
+                    Object.entries(celestialDb).forEach(([id, obj]) => {
+                        obj.hideLabel = false;
+                    });
+                    drawSceneRecalc();
                     return;
                 }
-                const results = Object.entries(celestialDb).filter(([id, obj]) => 
-                    id !== 'sun' && id !== 'moon' && obj.name.toLowerCase().includes(query)
-                );
-                
-                searchResults.innerHTML = '';
-                if (results.length > 0) {
-                    results.forEach(([id, obj]) => {
-                        const div = document.createElement('div');
-                        div.className = 'p-2 hover:bg-gray-600 cursor-pointer';
-                        div.textContent = obj.name;
-                        div.dataset.id = id;
-                        div.addEventListener('click', selectCelestialObject);
-                        searchResults.appendChild(div);
-                    });
-                    searchResults.classList.remove('hidden');
-                } else {
-                    searchResults.classList.add('hidden');
-                }
+                Object.entries(celestialDb).forEach(([id, obj]) => {
+                    if(id !== 'sun' && id !== 'moon' && obj.name.toLowerCase().includes(query)) {
+                        obj.hideLabel = false;
+                    } else {
+                        obj.hideLabel = true;
+                    }
+                });
+                drawSceneRecalc();
             };
 
-            const selectCelestialObject = (e) => {
-                const id = e.target.dataset.id;
-                const obj = celestialDb[id];
-                searchInput.value = '';
-                searchResults.classList.add('hidden');
-                
-                if (document.querySelector(`input[data-celestial="${id}"]`)) {
-                    return;
-                }
+            
 
-                const label = document.createElement('label');
-                label.className = 'p-2 rounded-md bg-gray-700/50 flex items-center justify-between';
-                label.innerHTML = `
-                    <div class="flex items-center">
-                        <input type="checkbox" data-celestial="${id}" class="form-checkbox" checked>
-                        <span class="ml-3">${obj.name}</span>
-                    </div>
-                    <button data-remove-id="${id}" class="text-gray-500 hover:text-red-400">&times;</button>
-                `;
-                celestialOptions.appendChild(label);
-                
-                label.querySelector(`button[data-remove-id="${id}"]`).addEventListener('click', (e) => {
-                    e.preventDefault();
-                    label.remove();
-                    drawScene();
+            drawSceneRecalc = () => {
+                celestialOptions.innerHTML = '';
+                const dateStr = datePicker.value;
+                const timeStr = timePicker.value;
+                const isUTC = timezoneSelect.value === 'UTC';
+                const dateString = `${dateStr}T${timeStr}:00${isUTC ? 'Z' : ''}`;
+                const date = new Date(dateString);
+                const city = cities[citySelect.value];
+                const sortedCelestialArray = Object.entries(celestialDb).map(([id, obj]) => {
+                    let getPosFunc;
+                    if (id === 'sun') {
+                        getPosFunc = (d) => SunCalc.getPosition(d, city.lat, city.lon);
+                    } else if (id === 'moon') {
+                        getPosFunc = (d) => SunCalc.getMoonPosition(d, city.lat, city.lon);
+                    } else {
+                        getPosFunc = (d) => raDecToAzAlt(obj.ra, obj.dec, city.lat, city.lon, d);
+                    }
+                    const pos = getPosFunc(date);
+                    obj.pos = pos; // Store position for later use
+                    obj.id = id;
+                    return obj;
+                }).sort((a, b) => {
+                    if (a.id === 'sun') return -1; 
+                    if (b.id === 'sun') return 1;  
+                    if (a.id === 'moon') return -1;
+                    if (b.id === 'moon') return 1;
+                    return b.pos.altitude - a.pos.altitude;
                 });
 
-                drawScene();
+                // Object.entries(celestialDb).forEach(([id, obj]) => {
+                sortedCelestialArray.forEach(obj => {
+                    const id = obj.id;
+                    const pos = obj.pos;
+                    const altDeg = toDeg(pos.altitude);
+                    const azDegNorth = (toDeg(pos.azimuth) + 180) % 360;
+                    const compass = radToCompass(pos.azimuth);
+                    const infoString = `<span class="font-bold" style="color:${obj.color};">${obj.name}</span> ${altDeg.toFixed(2)}°, ${azDegNorth.toFixed(2)}° ${compass}`;
+                    const label = document.createElement('label');
+                    label.className = 'p-2 rounded-md bg-gray-700/50 flex items-center justify-between';
+                    const checked = obj.path ? 'checked' : '';
+                    if (obj.hideLabel) {
+                        return;
+                    }
+                    label.innerHTML = `
+                        <div class="flex items-center">
+                            <input type="checkbox" data-celestial="${id}" class="form-checkbox" ${checked}>
+                            <span class="ml-3">${infoString}</span>
+                        </div>
+                        <button data-remove-id="${id}" class="text-gray-500 hover:text-red-400">&times;</button>
+                    `;
+                    celestialOptions.appendChild(label);
+                    label.querySelector(`input[data-celestial="${id}"]`).addEventListener('click', (e) => {
+                        obj.path = !obj.path;
+                        drawScene();
+                    });
+                    label.querySelector(`button[data-remove-id="${id}"]`).addEventListener('click', (e) => {
+                        e.preventDefault();
+                        label.remove();
+                        drawScene();
+                    });
+                });
+                if (drawScene) {
+                    drawScene();
+                }
             };
 
             drawScene = () => {
                 const showPaths = showPathsCheckbox.checked;
                 const showLocations = showLocationsCheckbox.checked;
 
-                // UI visibility toggling
-                timePickerContainer.classList.toggle('hidden', !showLocations);
-                celestialControlsContainer.classList.toggle('hidden', !showPaths);
-
+                
                 // Canvas drawing setup
                 const { width, height } = canvas.getBoundingClientRect();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -503,9 +594,8 @@
                 if (showPaths) {
                     const selectedDate = new Date(datePicker.value + 'T00:00:00Z');
                     const drawnLabels = [];
-                    document.querySelectorAll('#celestial-options input:checked').forEach(cb => {
-                        const id = cb.dataset.celestial;
-                        const obj = celestialDb[id];
+                    Object.entries(celestialDb).forEach(([id, obj]) => {
+                        if (obj.path !== true) return;
                         if (id === 'sun' || id === 'moon') {
                             drawCelestialPath(selectedDate, city, id, radius, obj.color, obj.name, drawnLabels);
                         } else {
@@ -527,17 +617,14 @@
                 ctx.restore();
 
                 // Info panel logic
-                if (showLocations) {
+                if (showPaths) {
+                    generateHourlyLegend();
+                } else {
                     const dateStr = datePicker.value;
                     const timeStr = timePicker.value;
                     const isUTC = timezoneSelect.value === 'UTC';
                     const dateString = `${dateStr}T${timeStr}:00${isUTC ? 'Z' : ''}`;
-                    const selectedDate = new Date(dateString);
-                    generateLocationInfo(selectedDate, city);
-                } else if (showPaths) {
-                    generateHourlyLegend();
-                } else {
-                    infoPanelTitle.textContent = 'Select a display mode';
+                    infoPanelTitle.textContent = `Celestial Positions at ${new Date(dateString).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
                     infoPanelContent.innerHTML = '';
                 }
             };
@@ -747,40 +834,6 @@
                     div.innerHTML = `<div class="w-4 h-4 rounded-full" style="background-color: ${color};"></div><span>${String(hour).padStart(2, '0')}:00</span>`;
                     infoPanelContent.appendChild(div);
                 });
-            };
-
-            const generateLocationInfo = (date, city) => {
-                infoPanelTitle.textContent = `Celestial Positions at ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-                infoPanelContent.innerHTML = '';
-                infoPanelContent.classList.remove('justify-center');
-                infoPanelContent.classList.add('justify-start');
-
-                const visibleObjects = [];
-                Object.entries(celestialDb).forEach(([id, obj]) => {
-                    let getPosFunc;
-                    if (id === 'sun') {
-                        getPosFunc = (d) => SunCalc.getPosition(d, city.lat, city.lon);
-                    } else if (id === 'moon') {
-                        getPosFunc = (d) => SunCalc.getMoonPosition(d, city.lat, city.lon);
-                    } else {
-                        getPosFunc = (d) => raDecToAzAlt(obj.ra, obj.dec, city.lat, city.lon, d);
-                    }
-                    const pos = getPosFunc(date);
-                    if (pos.altitude > 0) {
-                        const altDeg = toDeg(pos.altitude);
-                        const azDegNorth = (toDeg(pos.azimuth) + 180) % 360;
-                        const compass = radToCompass(pos.azimuth);
-                        const infoString = `<span class="font-bold" style="color:${obj.color};">${obj.name}</span> ${altDeg.toFixed(2)}°, ${azDegNorth.toFixed(2)}° ${compass}`;
-                        visibleObjects.push(infoString);
-                    }
-                });
-
-                if (visibleObjects.length > 0) {
-                    infoPanelContent.innerHTML = visibleObjects.join('<span class="text-gray-500 mx-2">•</span>');
-                } else {
-                    infoPanelContent.innerHTML = '<span class="text-gray-400">No celestial objects visible above the horizon.</span>';
-                    infoPanelContent.classList.add('justify-center');
-                }
             };
 
             const getLST = (date, lon) => {
