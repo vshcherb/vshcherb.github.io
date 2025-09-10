@@ -59,20 +59,6 @@
         #info-panel-content::-webkit-scrollbar { height: 4px; }
         #info-panel-content::-webkit-scrollbar-track { background: #2d3748; }
         #info-panel-content::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 2px; }
-
-
-        /* Toggle Switch */
-        .toggle-bg:after {
-            content: '';
-            @apply absolute top-0.5 left-0.5 bg-white border border-gray-300 rounded-full h-5 w-5 transition shadow-sm;
-        }
-        input:checked + .toggle-bg:after {
-            transform: translateX(100%);
-            @apply border-white;
-        }
-        input:checked + .toggle-bg {
-            @apply bg-cyan-500;
-        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 flex flex-col md:flex-row h-screen overflow-hidden">
@@ -84,15 +70,18 @@
         </div>
         
         <div class="space-y-8">
-            <div>
-                <label for="mode-toggle" class="flex items-center cursor-pointer">
-                    <span class="mr-3 text-sm font-medium">Paths</span>
-                    <div class="relative">
-                        <input type="checkbox" id="mode-toggle" class="sr-only">
-                        <div class="block bg-gray-600 w-10 h-6 rounded-full toggle-bg"></div>
-                    </div>
-                    <span class="ml-3 text-sm font-medium">Locations</span>
-                </label>
+             <div>
+                <h2 class="text-lg font-semibold mb-3 border-b border-gray-600 pb-2">Display Mode</h2>
+                <div class="space-y-2 mt-2">
+                     <label class="p-2 rounded-md bg-gray-700/50 flex items-center">
+                         <input type="checkbox" id="show-paths-checkbox" class="form-checkbox" checked>
+                         <span class="ml-3">Show Celestial Paths</span>
+                     </label>
+                     <label class="p-2 rounded-md bg-gray-700/50 flex items-center">
+                         <input type="checkbox" id="show-locations-checkbox" class="form-checkbox">
+                         <span class="ml-3">Show Object Locations (at time)</span>
+                     </label>
+                </div>
             </div>
 
             <div>
@@ -219,7 +208,8 @@
             const nextDayBtn = document.getElementById('next-day-btn');
             const searchInput = document.getElementById('search-celestial');
             const searchResults = document.getElementById('search-results');
-            const modeToggle = document.getElementById('mode-toggle');
+            const showPathsCheckbox = document.getElementById('show-paths-checkbox');
+            const showLocationsCheckbox = document.getElementById('show-locations-checkbox');
             const timePickerContainer = document.getElementById('time-picker-container');
             const timePicker = document.getElementById('time-picker');
             const celestialControlsContainer = document.getElementById('celestial-controls-container');
@@ -353,7 +343,7 @@
                 window.addEventListener('resize', resizeCanvas);
                 
                 // General listeners
-                [datePicker, timezoneSelect, celestialOptions, modeToggle, timePicker].forEach(el => {
+                [datePicker, timezoneSelect, celestialOptions, showPathsCheckbox, showLocationsCheckbox, timePicker].forEach(el => {
                     el.addEventListener('change', () => drawScene());
                 });
 
@@ -487,10 +477,14 @@
             };
 
             drawScene = () => {
-                const isLocationMode = modeToggle.checked;
-                timePickerContainer.classList.toggle('hidden', !isLocationMode);
-                celestialControlsContainer.classList.toggle('hidden', isLocationMode);
+                const showPaths = showPathsCheckbox.checked;
+                const showLocations = showLocationsCheckbox.checked;
 
+                // UI visibility toggling
+                timePickerContainer.classList.toggle('hidden', !showLocations);
+                celestialControlsContainer.classList.toggle('hidden', !showPaths);
+
+                // Canvas drawing setup
                 const { width, height } = canvas.getBoundingClientRect();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = '#111827';
@@ -505,16 +499,8 @@
 
                 const city = cities[citySelect.value];
                 
-                if (isLocationMode) {
-                    const dateStr = datePicker.value;
-                    const timeStr = timePicker.value;
-                    const isUTC = timezoneSelect.value === 'UTC';
-                    const dateString = `${dateStr}T${timeStr}:00${isUTC ? 'Z' : ''}`;
-                    const selectedDate = new Date(dateString);
-                    generateLocationInfo(selectedDate, city);
-                    drawAllObjectLocations(selectedDate, city, radius);
-                } else {
-                    generateHourlyLegend();
+                // Drawing paths
+                if (showPaths) {
                     const selectedDate = new Date(datePicker.value + 'T00:00:00Z');
                     const drawnLabels = [];
                     document.querySelectorAll('#celestial-options input:checked').forEach(cb => {
@@ -527,8 +513,33 @@
                         }
                     });
                 }
+
+                // Drawing locations
+                if (showLocations) {
+                    const dateStr = datePicker.value;
+                    const timeStr = timePicker.value;
+                    const isUTC = timezoneSelect.value === 'UTC';
+                    const dateString = `${dateStr}T${timeStr}:00${isUTC ? 'Z' : ''}`;
+                    const selectedDate = new Date(dateString);
+                    drawAllObjectLocations(selectedDate, city, radius);
+                }
                 
                 ctx.restore();
+
+                // Info panel logic
+                if (showLocations) {
+                    const dateStr = datePicker.value;
+                    const timeStr = timePicker.value;
+                    const isUTC = timezoneSelect.value === 'UTC';
+                    const dateString = `${dateStr}T${timeStr}:00${isUTC ? 'Z' : ''}`;
+                    const selectedDate = new Date(dateString);
+                    generateLocationInfo(selectedDate, city);
+                } else if (showPaths) {
+                    generateHourlyLegend();
+                } else {
+                    infoPanelTitle.textContent = 'Select a display mode';
+                    infoPanelContent.innerHTML = '';
+                }
             };
 
             const drawAllObjectLocations = (date, city, radius) => {
