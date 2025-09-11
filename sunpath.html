@@ -77,8 +77,7 @@
         </div>
         
         <div class="space-y-4">
-             <!-- Section 1: Display Mode -->
-            <div class="border-b border-gray-700 pb-4">
+             <div class="border-b border-gray-700 pb-4">
                 <div id="toggle-display" class="flex justify-between items-center cursor-pointer">
                     <h2 class="text-lg font-semibold text-gray-300">Display Mode</h2>
                     <i data-lucide="chevron-down" class="w-5 h-5 transition-transform text-gray-400"></i>
@@ -92,10 +91,16 @@
                          <input type="checkbox" id="show-locations-checkbox" class="form-checkbox">
                          <span class="ml-3">Show Object Locations (at time)</span>
                      </label>
+                     <label class="block p-2 rounded-md bg-gray-700/50">
+                        <span class="text-gray-400 text-sm font-medium">Projection</span>
+                        <select id="projection-select" class="form-select w-full mt-1 rounded-md shadow-sm">
+                            <option value="equidistant" selected>Equidistant (Linear Altitude)</option>
+                            <option value="stereographic">Stereographic</option>
+                        </select>
+                    </label>
                 </div>
             </div>
 
-            <!-- Section 2: Location & Time -->
             <div class="border-b border-gray-700 pb-4">
                 <div id="toggle-location" class="flex justify-between items-center cursor-pointer">
                     <h2 class="text-lg font-semibold text-gray-300">Location & Time</h2>
@@ -182,7 +187,6 @@
                 </div>
             </div>
 
-            <!-- Section 3: Celestial Bodies -->
             <div id="celestial-controls-container" class="pb-4">
                 <div id="toggle-celestial" class="flex justify-between items-center cursor-pointer">
                     <h2 class="text-lg font-semibold text-gray-300">Celestial Bodies</h2>
@@ -244,6 +248,7 @@
             const coordRightBtn = document.getElementById('coord-right-btn');
             const prevMinuteBtn = document.getElementById('prev-minute-btn');
             const nextMinuteBtn = document.getElementById('next-minute-btn');
+            const projectionSelect = document.getElementById('projection-select');
 
 
             // --- DATA ---
@@ -475,6 +480,9 @@
                     el.addEventListener('change', () => drawSceneRecalc());
                 });
 
+                projectionSelect.addEventListener('change', () => drawScene());
+
+
                 // Specific listeners for location controls
                 citySelect.addEventListener('change', () => {
                     if (citySelect.value !== 'custom') {
@@ -639,6 +647,11 @@
             drawScene = () => {
                 const showPaths = showPathsCheckbox.checked;
                 const showLocations = showLocationsCheckbox.checked;
+                const dateStr = datePicker.value;
+                const timeStr = timePicker.value;
+                const isUTC = timezoneSelect.value === 'UTC';
+                const dateString = `${dateStr}T${timeStr}:00${isUTC ? 'Z' : ''}`;
+                const date = new Date(dateString);
 
                 
                 // Canvas drawing setup
@@ -658,26 +671,20 @@
                 
                 // Drawing paths
                 if (showPaths) {
-                    const selectedDate = new Date(datePicker.value + 'T00:00:00Z');
+                    
                     const drawnLabels = [];
                     Object.entries(celestialDb).forEach(([id, obj]) => {
                         if (obj.path !== true) return;
                         if (id === 'sun' || id === 'moon') {
-                            drawCelestialPath(selectedDate, city, id, radius, obj.color, obj.name, drawnLabels);
+                            drawCelestialPath(date, city, id, radius, obj.color, obj.name, drawnLabels);
                         } else {
-                            drawObjectPath(selectedDate, city, obj, radius, obj.color, obj.name, drawnLabels);
+                            drawObjectPath(date, city, obj, radius, obj.color, obj.name, drawnLabels);
                         }
                     });
                 }
-
                 // Drawing locations
                 if (showLocations) {
-                    const dateStr = datePicker.value;
-                    const timeStr = timePicker.value;
-                    const isUTC = timezoneSelect.value === 'UTC';
-                    const dateString = `${dateStr}T${timeStr}:00${isUTC ? 'Z' : ''}`;
-                    const selectedDate = new Date(dateString);
-                    drawAllObjectLocations(selectedDate, city, radius);
+                    drawAllObjectLocations(date, city, radius);
                 }
                 
                 ctx.restore();
@@ -727,9 +734,15 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.font = `${10 / scale}px Inter`;
+                const projection = projectionSelect.value;
 
-                for (let i = 10; i <= 80; i += 10) {
-                    const r = radius * (1 - i / 90);
+                for (let i = 0; i <= 80; i += 10) {
+                    let r;
+                    if (projection === 'stereographic') {
+                        r = radius * Math.tan((Math.PI / 2 - toRad(i)) / 2);
+                    } else { // equidistant
+                        r = radius * (1 - i / 90);
+                    }
                     ctx.beginPath();
                     ctx.arc(0, 0, r, 0, 2 * Math.PI);
                     ctx.setLineDash([2, 4]);
@@ -795,7 +808,19 @@
                 const tzOffsetHours = timezoneSelect.value === 'local' && citySelect.value !== 'custom' ? city.tzOffset : 0;
                 ctx.beginPath();
                 let lastPos = null;
-                for (let i = 0; i <= 24 * 60; i += 5) {
+                let hourShift = 0;
+                for (let i = 24; i >= 0; i --) {
+                    const loopDate = new Date(date.getTime() + i * 3600 * 1000);
+                    const pos = getPosFunc(loopDate);
+                    if (pos.altitude < 0) {
+                        if (i == 0) {
+                            hourShift = 0;
+                        } else {
+                            hourShift = 24 - i;
+                        }
+                    } 
+                }
+                for (let i = -hourShift * 60; i <= (24 - hourShift) * 60; i += 5) {
                     const loopDate = new Date(date.getTime() + i * 60 * 1000);
                     const pos = getPosFunc(loopDate);
                     if (pos.altitude > 0) {
@@ -810,18 +835,20 @@
                     lastPos = pos;
                 }
                 ctx.stroke();
-                for (let hour = 0; hour < 24; hour++) {
-                    const hourDate = new Date(date.getTime() + hour * 3600 * 1000);
+                for (let hour = -hourShift; hour < 24 - hourShift; hour++) {
+                    const msInHour = 3600 * 1000;
+                    const hourDate = new Date(Math.round(date.getTime() / msInHour + hour) * msInHour);
+                    const utcHour = hourDate.getUTCHours();
                     const pos = getPosFunc(hourDate);
                     if (pos.altitude > 0) {
                         const { x, y } = getCanvasCoords(pos.azimuth, pos.altitude, radius);
                         ctx.beginPath();
                         ctx.arc(x, y, 4 / scale, 0, 2 * Math.PI);
-                        const hue = (hour * 15 + 60) % 360;
+                        const hue = ((utcHour + tzOffsetHours) * 15 + 60) % 360;
                         ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
                         ctx.fill();
                         if (scale > 1.8) {
-                            const displayHour = (hour + tzOffsetHours + 24) % 24;
+                            const displayHour = (utcHour + tzOffsetHours + 24) % 24;
                             const label = `${String(displayHour).padStart(2, '0')}:00`;
                             const labelBox = { x: x - 15/scale, y: y - 20/scale, w: 30/scale, h: 10/scale };
                             let overlaps = drawnLabels.some(box => labelBox.x < box.x + box.w && labelBox.x + labelBox.w > box.x && labelBox.y < box.y + box.h && labelBox.y + labelBox.h > box.y);
@@ -862,8 +889,19 @@
                 }
             };
             const getCanvasCoords = (azimuth, altitude, radius) => {
+                const projection = projectionSelect.value;
+                let r;
+
+                if (projection === 'stereographic') {
+                    // Stereographic projection: r = k * tan((90° - alt) / 2)
+                    // We set k = radius, so that at the horizon (alt=0), the radial distance is `radius * tan(45°) = radius`.
+                    r = radius * Math.tan((Math.PI / 2 - altitude) / 2);
+                } else { // 'equidistant' is the default
+                    // Equidistant azimuthal projection (linear mapping of altitude)
+                    r = radius * (1 - (altitude / (Math.PI / 2)));
+                }
+
                 const angle = azimuth + Math.PI / 2;
-                const r = radius * (1 - (altitude / (Math.PI / 2)));
                 return { x: r * Math.cos(angle), y: r * Math.sin(angle) };
             };
             const toRad = (deg) => deg * Math.PI / 180;
