@@ -5,17 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cost Map Visualizer</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background-color: #333; color: #eee; }
-        #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background-color: #333; color: #eee; display: flex; }
+        #app-container { display: flex; align-items: center; justify-content: center; width: 100vw; height: 100vh; }
+        #canvas-container { width: 512px; height: 512px; }
         #controls {
-            position: absolute;
-            top: 10px;
-            left: 10px;
             background: rgba(0, 0, 0, 0.7);
             padding: 15px;
             border-radius: 8px;
             max-height: calc(100vh - 20px);
             overflow-y: auto;
+            margin-right: 20px;
         }
         .control-group { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #555; }
         .control-group:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
@@ -27,58 +26,55 @@
     </style>
 </head>
 <body>
-    <div id="canvas-container"></div>
+    <div id="app-container">
+        <div id="controls">
+            <h2>Настройки</h2>
+            <div class="control-group">
+                <label for="geotiffInput">Загрузить свой GeoTIFF:</label>
+                <input type="file" id="geotiffInput" accept=".tif, .tiff">
+            </div>
+            <div class="control-group">
+                <label>Режим отрисовки:</label>
+                <input type="radio" id="mode2D" name="renderMode" value="2D" checked><label for="mode2D">2D Карта</label><br>
+                <input type="radio" id="mode3D" name="renderMode" value="3D"><label for="mode3D">3D Рельеф</label>
+            </div>
 
-    <div id="controls">
-        <h2>Настройки</h2>
-        <div class="control-group">
-            <label for="geotiffInput">Загрузить свой GeoTIFF:</label>
-            <input type="file" id="geotiffInput" accept=".tif, .tiff">
-        </div>
-        <div class="control-group">
-            <label>Режим отрисовки:</label>
-            <input type="radio" id="mode2D" name="renderMode" value="2D" checked><label for="mode2D">2D Карта</label><br>
-            <input type="radio" id="mode3D" name="renderMode" value="3D"><label for="mode3D">3D Рельеф</label>
-        </div>
+            <div class="control-group">
+                <label for="startPointX">Стартовая точка (X):</label>
+                <input type="range" id="startPointX" min="0" max="1" step="0.01" value="0.5"><span id="startPointX_val">0.5</span><br>
+                <label for="startPointY">Стартовая точка (Y):</label>
+                <input type="range" id="startPointY" min="0" max="1" step="0.01" value="0.5"><span id="startPointY_val">0.5</span><br>
+                <button id="resetStartPoint">Сбросить в центр</button><br>
+                <small>Кликните по карте, чтобы задать стартовую точку.</small>
+            </div>
 
-        <div class="control-group">
-            <label for="startPointX">Стартовая точка (X):</label>
-            <input type="range" id="startPointX" min="0" max="1" step="0.01" value="0.5"><span id="startPointX_val">0.5</span><br>
-            <label for="startPointY">Стартовая точка (Y):</label>
-            <input type="range" id="startPointY" min="0" max="1" step="0.01" value="0.5"><span id="startPointY_val">0.5</span><br>
-            <button id="resetStartPoint">Сбросить в центр</button><br>
-            <small>Кликните по карте, чтобы задать стартовую точку.</small>
-        </div>
+            <div class="control-group">
+                <label>Коэффициенты штрафа:</label>
+                <label for="scaleUp">Штраф за подъем (Up):</label>
+                <input type="range" id="scaleUp" min="0.0" max="10.0" step="0.1" value="1.0"><span id="scaleUp_val">1.0</span><br>
+                <label for="scaleDown">Штраф за спуск (Down):</label>
+                <input type="range" id="scaleDown" min="0.0" max="10.0" step="0.1" value="0.0"><span id="scaleDown_val">0.0</span><br>
+                <small>cost = horiz_dist + scale_up * vert_up + scale_down * vert_down</small>
+            </div>
 
-        <div class="control-group">
-            <label>Коэффициенты штрафа:</label>
-            <label for="scaleUp">Штраф за подъем (Up):</label>
-            <input type="range" id="scaleUp" min="0.0" max="10.0" step="0.1" value="1.0"><span id="scaleUp_val">1.0</span><br>
-            <label for="scaleDown">Штраф за спуск (Down):</label>
-            <input type="range" id="scaleDown" min="0.0" max="10.0" step="0.1" value="0.0"><span id="scaleDown_val">0.0</span><br>
-            <small>cost = horiz_dist + scale_up * vert_up + scale_down * vert_down</small>
-        </div>
+            <div class="control-group">
+                <label for="lineSpacing">Плотность кругов (м):</label>
+                <input type="range" id="lineSpacing" min="10" max="500" step="10" value="50"><span id="lineSpacing_val">50</span><br>
+                <label for="lineThickness">Толщина линий (м):</label>
+                <input type="range" id="lineThickness" min="1" max="20" step="1" value="2"><span id="lineThickness_val">2</span>
+            </div>
 
-        <div class="control-group">
-            <label for="lineSpacing">Плотность кругов (м):</label>
-            <input type="range" id="lineSpacing" min="10" max="500" step="10" value="50"><span id="lineSpacing_val">50</span><br>
-            <label for="lineThickness">Толщина линий (м):</label>
-            <input type="range" id="lineThickness" min="1" max="20" step="1" value="2"><span id="lineThickness_val">2</span>
+            <div class="control-group">
+                <label for="waveIterations">Итераций расчета волны:</label>
+                <input type="number" id="waveIterations" min="50" max="2000" step="50" value="500"><br>
+                <button id="recalculateWave">Пересчитать волну</button>
+            </div>
         </div>
-
-        <div class="control-group">
-            <label for="waveIterations">Итераций расчета волны:</label>
-            <input type="number" id="waveIterations" min="50" max="2000" step="50" value="500"><br>
-            <button id="recalculateWave">Пересчитать волну</button>
-        </div>
+        <div id="canvas-container"></div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.1/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.1/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.4-beta.0/dist-browser/geotiff.min.js"></script>
-
-    
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="main.js"></script>
 </body>
 </html>

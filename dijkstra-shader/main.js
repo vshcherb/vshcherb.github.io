@@ -88,16 +88,19 @@ function generateHeightmap(size) {
             const y = j / size;
             // Простой шум для создания рельефа
             let height = Math.sin(x * Math.PI * 8) * Math.cos(y * Math.PI * 8) * 0.1;
-            height += Math.sin(x * Math.PI * 16) * Math.cos(y * Math.PI * 16) * 0.05;
-            height += (Math.sin(x * Math.PI * 4) + Math.cos(y * Math.PI * 4)) * 0.1;
+            height += Math.sin(x * Math.PI * 16) * Math.cos(y * Math.PI * 16) * Math.random() * 0.05;
+            height += (Math.sin(x * Math.PI * 4) + Math.cos(y * Math.PI * 4)) * Math.random() * 0.1;
+            
             height = (height + 1.0) / 2.0; // Нормализация от 0 до 1
+
             data[j * size + i] = height;
         }
     }
     return new THREE.DataTexture(data, size, size, THREE.RedFormat, THREE.FloatType);
 }
 
-const HEIGHTMAP_SIZE = 256; // Размер нашей карты (например, 256x256)
+const CANVAS_SIZE = 512;
+const HEIGHTMAP_SIZE = 512; // Размер нашей карты (например, 256x256)
 const heightmapTexture = generateHeightmap(HEIGHTMAP_SIZE);
 heightmapTexture.needsUpdate = true;
 
@@ -110,7 +113,7 @@ const MAX_REAL_HEIGHT = 100.0; // Например, карта высот от 0
 const scene = new THREE.Scene();
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1); // Для 2D рендеринга в текстуру
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(CANVAS_SIZE, CANVAS_SIZE);
 document.getElementById('canvas-container').appendChild(renderer.domElement);
 
 // Камера для финального рендеринга (может быть ортографической или перспективной)
@@ -123,8 +126,8 @@ function setupCamera(mode) {
 
     if (mode === '2D') {
         finalCamera = new THREE.OrthographicCamera(
-            -window.innerWidth / 2, window.innerWidth / 2,
-            window.innerHeight / 2, -window.innerHeight / 2,
+            -CANVAS_SIZE / 2, CANVAS_SIZE / 2,
+            CANVAS_SIZE / 2, -CANVAS_SIZE / 2,
             0.1, 1000
         );
         finalCamera.position.z = 10;
@@ -132,7 +135,7 @@ function setupCamera(mode) {
         if (orbitControls) orbitControls.dispose(); // Отключаем OrbitControls для 2D
         orbitControls = null;
     } else { // 3D
-        finalCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        finalCamera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
         finalCamera.position.set(HEIGHTMAP_SIZE / 2, HEIGHTMAP_SIZE / 2, HEIGHTMAP_SIZE); // Взгляд сверху
         finalCamera.lookAt(HEIGHTMAP_SIZE / 2, HEIGHTMAP_SIZE / 2, 0);
         orbitControls = new THREE.OrbitControls(finalCamera, renderer.domElement);
@@ -144,21 +147,7 @@ function setupCamera(mode) {
 }
 setupCamera('2D'); // Инициализация 2D по умолчанию
 
-// Обработка изменения размера окна
-window.addEventListener('resize', () => {
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    if (finalCamera instanceof THREE.OrthographicCamera) {
-        finalCamera.left = -window.innerWidth / 2;
-        finalCamera.right = window.innerWidth / 2;
-        finalCamera.top = window.innerHeight / 2;
-        finalCamera.bottom = -window.innerHeight / 2;
-        finalCamera.updateProjectionMatrix();
-    } else if (finalCamera instanceof THREE.PerspectiveCamera) {
-        finalCamera.aspect = window.innerWidth / window.innerHeight;
-        finalCamera.updateProjectionMatrix();
-    }
-});
-
+// Обработка изменения размера окна - УДАЛЕНО, так как размер холста фиксированный
 
 // Создание двух FBO для пинг-понга
 const targetA = new THREE.WebGLRenderTarget(HEIGHTMAP_SIZE, HEIGHTMAP_SIZE, {
@@ -386,7 +375,7 @@ function animate() {
             quad.material = render2DMaterial;
             render2DMaterial.uniforms.u_finalCostMap.value = currentReadTarget.texture;
             // Убедимся, что квад отображает всю карту
-            quad.scale.set(window.innerWidth / HEIGHTMAP_SIZE, window.innerHeight / HEIGHTMAP_SIZE, 1);
+            quad.scale.set(CANVAS_SIZE, CANVAS_SIZE, 1);
             quad.position.set(0, 0, 0); // Центрируем квад
             renderer.render(quad, finalCamera);
         } else { // 3D режим
@@ -432,7 +421,6 @@ loadShaders().then(() => {
     render3DMaterial.vertexShader = shaders.render3D_vert;
     render3DMaterial.fragmentShader = shaders.render3D_frag;
     render3DMaterial.needsUpdate = true;
-
     animate();
     calculateWave(); // Изначальный расчет
 });
