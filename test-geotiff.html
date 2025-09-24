@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoTIFF 3D Viewer</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+        }
+
+        #app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 320px;
+            flex-shrink: 0;
+            background-color: #fff;
+            padding: 25px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        #sidebar h1 {
+            font-size: 24px;
+            margin-top: 0;
+            color: #333;
+        }
+
+        #sidebar p {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #555;
+        }
+
+        #controls, #view-options {
+            margin-bottom: 20px;
+        }
+
+        input[type="file"] {
+            border: 1px solid #ccc;
+            width: 100%;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            box-sizing: border-box;
+            margin-bottom: 15px;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.2s, opacity 0.2s;
+            margin-top: 5px;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #a0c9f7;
+            cursor: not-allowed;
+        }
+
+        #loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: none;
+            margin: 20px auto 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        #info-panel, #view-options {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        #info-panel h2, #view-options h2 {
+            font-size: 18px;
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+
+        .info-item {
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .info-item strong {
+            display: inline-block;
+            width: 70px;
+            color: #333;
+        }
+
+        .info-item span {
+            font-family: 'Courier New', Courier, monospace;
+            background: #e9ecef;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        
+        #instructions {
+            margin-top: auto;
+            padding-top: 20px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        #main-content {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        #container {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+    <!-- Import necessary libraries -->
+    <script src="https://unpkg.com/geotiff@2.0.7/dist-browser/geotiff.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="app-container">
+        <div id="sidebar">
+            <h1>GeoTIFF 3D Viewer 🗺️</h1>
+            <p>Select a GeoTIFF Digital Elevation Model (DEM) file to visualize it.</p>
+            
+            <div id="controls">
+                <input type="file" id="fileInput" accept=".tif,.tiff">
+                <button id="visualizeBtn">Visualize</button>
+                <div id="loader"></div>
+            </div>
+
+            <div id="view-options">
+                <h2>View Options</h2>
+                <button id="slopeBtn" disabled>Calculate Slope</button>
+                <button id="resetBtn" disabled>Reset View</button>
+            </div>
+
+            <div id="info-panel">
+                <h2>Scene Info</h2>
+                <div class="info-item">
+                    <strong>Camera</strong> <span id="camera-pos">N/A</span>
+                </div>
+                <div class="info-item">
+                    <strong>Center</strong> <span id="center-pos">N/A</span>
+                </div>
+            </div>
+            
+            <div id="instructions">
+                <p><strong>Controls:</strong></p>
+                <ul>
+                    <li><b>Rotate:</b> Left-click + Drag</li>
+                    <li><b>Pan:</b> Right-click + Drag</li>
+                    <li><b>Zoom:</b> Mouse Scroll</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div id="main-content">
+            <div id="container"></div>
+        </div>
+    </div>
+
+    <!-- Shader Scripts -->
+    <script id="vertexShader" type="x-shader/x-vertex">
+        varying vec3 vNormal;
+        void main() {
+            vNormal = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+
+    <script id="fragmentShader" type="x-shader/x-fragment">
+        varying vec3 vNormal;
+        void main() {
+            // The 'up' vector in model space is (0, 0, 1) because we've rotated the plane.
+            // In the shader, after transformations, the world 'up' is (0, 1, 0).
+            // But it's easier to work with the normal that's passed.
+            vec3 up = vec3(0.0, 0.0, 1.0);
+            
+            // The dot product gives us the cosine of the angle between the surface normal and the up vector.
+            float dotProduct = abs(dot(vNormal, up));
+            
+            // acos gives the angle in radians. We convert it to degrees.
+            float slopeAngle = acos(dotProduct); // Range: 0 to PI/2
+            
+            // Normalize slope from 0 (flat) to 1 (vertical)
+            float slopeRatio = slopeAngle / (3.14159265 / 2.0);
+
+            // Define colors for the gradient
+            vec3 flatColor = vec3(0.0, 1.0, 0.0);    // Green for flat areas
+            vec3 midColor = vec3(1.0, 1.0, 0.0);     // Yellow for mid-slopes
+            vec3 steepColor = vec3(1.0, 0.0, 0.0);   // Red for steep areas
+
+            // Create a two-part gradient: green -> yellow -> red
+            vec3 finalColor = mix(flatColor, midColor, smoothstep(0.0, 0.5, slopeRatio));
+            finalColor = mix(finalColor, steepColor, smoothstep(0.5, 1.0, slopeRatio));
+
+            gl_FragColor = vec4(finalColor, 1.0);
+        }
+    </script>
+
+    <script>
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const visualizeBtn = document.getElementById('visualizeBtn');
+        const slopeBtn = document.getElementById('slopeBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const container = document.getElementById('container');
+        const mainContent = document.getElementById('main-content');
+        const loader = document.getElementById('loader');
+        const cameraPosDisplay = document.getElementById('camera-pos');
+        const centerPosDisplay = document.getElementById('center-pos');
+
+        // Three.js variables
+        let scene, camera, renderer, controls, mesh, originalMaterial, slopeMaterial;
+
+        visualizeBtn.addEventListener('click', () => {
+            if (fileInput.files.length === 0) {
+                alert("Please select a GeoTIFF file first!");
+                return;
+            }
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onloadstart = () => {
+                loader.style.display = 'block';
+                visualizeBtn.disabled = true;
+                slopeBtn.disabled = true;
+                resetBtn.disabled = true;
+                if (renderer) {
+                    container.removeChild(renderer.domElement);
+                }
+                 cameraPosDisplay.textContent = "Loading...";
+                 centerPosDisplay.textContent = "Loading...";
+            };
+
+            reader.onload = async (event) => {
+                try {
+                    const arrayBuffer = event.target.result;
+                    const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+                    const image = await tiff.getImage();
+                    const data = await image.readRasters({ interleave: true });
+                    const width = image.getWidth();
+                    const height = image.getHeight();
+
+                    // --- Basic Scene Setup ---
+                    scene = new THREE.Scene();
+                    scene.background = new THREE.Color(0x87CEEB);
+
+                    camera = new THREE.PerspectiveCamera(75, mainContent.clientWidth / mainContent.clientHeight, 0.1, 20000);
+                    camera.position.set(width / 8, width / 4, height / 4);
+
+                    renderer = new THREE.WebGLRenderer({ antialias: true });
+                    renderer.setSize(mainContent.clientWidth, mainContent.clientHeight);
+                    container.appendChild(renderer.domElement);
+
+                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                    scene.add(ambientLight);
+                    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                    directionalLight.position.set(200, 500, 300);
+                    scene.add(directionalLight);
+
+                    const geometry = new THREE.PlaneGeometry(width, height, width - 1, height - 1);
+                    const vertices = geometry.attributes.position.array;
+
+                    let minEl = Infinity, maxEl = -Infinity;
+                    for (let i = 0; i < data.length; i++) {
+                        if (data[i] < minEl) minEl = data[i];
+                        if (data[i] > maxEl) maxEl = data[i];
+                    }
+                    
+                    for (let i = 0, j = 0; i < vertices.length; i++, j += 3) {
+                        const row = Math.floor(i / width);
+                        const col = i % width;
+                        const dataIndex = (height - 1 - row) * width + col;
+                        const elevation = data[dataIndex];
+                        vertices[j + 2] = (elevation - minEl) / (maxEl - minEl) * (width/10); 
+                    }
+
+                    geometry.attributes.position.needsUpdate = true;
+                    geometry.computeVertexNormals();
+
+                    // --- Materials and Mesh ---
+                    originalMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xcccccc, side: THREE.DoubleSide
+                    });
+
+                    mesh = new THREE.Mesh(geometry, originalMaterial);
+                    mesh.rotation.x = -Math.PI / 2;
+                    scene.add(mesh);
+                    
+                    controls = new THREE.OrbitControls(camera, renderer.domElement);
+                    controls.target.set(0, 0, 0);
+                    controls.update();
+                    
+                    slopeBtn.disabled = false;
+                    resetBtn.disabled = false;
+
+                    function animate() {
+                        requestAnimationFrame(animate);
+                        controls.update();
+                        
+                        const camPos = camera.position;
+                        const targetPos = controls.target;
+                        cameraPosDisplay.textContent = `x:${camPos.x.toFixed(1)}, y:${camPos.y.toFixed(1)}, z:${camPos.z.toFixed(1)}`;
+                        centerPosDisplay.textContent = `x:${targetPos.x.toFixed(1)}, y:${targetPos.y.toFixed(1)}, z:${targetPos.z.toFixed(1)}`;
+                        
+                        renderer.render(scene, camera);
+                    }
+                    animate();
+
+                } catch (error) {
+                    console.error(error);
+                    alert("Error processing GeoTIFF file. Please ensure it's a valid DEM file.");
+                } finally {
+                    loader.style.display = 'none';
+                    visualizeBtn.disabled = false;
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+        
+        // --- Event Listeners for View Options ---
+        slopeBtn.addEventListener('click', () => {
+            if (!mesh) return;
+            if (!slopeMaterial) {
+                slopeMaterial = new THREE.ShaderMaterial({
+                    vertexShader: document.getElementById('vertexShader').textContent,
+                    fragmentShader: document.getElementById('fragmentShader').textContent,
+                    side: THREE.DoubleSide
+                });
+            }
+            mesh.material = slopeMaterial;
+        });
+
+        resetBtn.addEventListener('click', () => {
+            if (!mesh || !originalMaterial) return;
+            mesh.material = originalMaterial;
+        });
+
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = mainContent.clientWidth / mainContent.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(mainContent.clientWidth, mainContent.clientHeight);
+            }
+        });
+    </script>
+</body>
+</html>
